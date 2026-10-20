@@ -2402,6 +2402,26 @@ describe('Search (M3U-only, no account)', () => {
     expect(cells[1].style.top).toBe('88px');
   });
 
+  it('defers channel row logos until their list scrolls near', async () => {
+    vi.stubGlobal('IntersectionObserver', class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    });
+    try {
+      playlistMock.channels = [{ ...chan('Alpha News'), logo: 'http://host/logo-a.png' }];
+      playlistMock.indexOf.mockReturnValue(0);
+      const { view } = await openM3U();
+      await view.setQuery('news');
+      const logo = container.querySelector('.search-channel-row img.search-row-logo')!;
+      expect(logo.hasAttribute('src')).toBe(false);
+      expect(logo.getAttribute('data-lazy-src')).toBe('http://host/logo-a.png');
+      expect(logo.closest('[data-lazy-root]')?.classList.contains('search-virtual-scroll')).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('plays a channel row on select', async () => {
     playlistMock.channels = [chan('Alpha News')];
     playlistMock.indexOf.mockReturnValue(3);

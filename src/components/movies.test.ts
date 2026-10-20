@@ -88,6 +88,29 @@ describe('Movies browse + grid', () => {
     expect(container.querySelector('.catalog-tile[data-item-id="10"]')?.textContent).toContain('Movie One');
   });
 
+  it('defers rail posters until their rail scrolls near', async () => {
+    const observed: Element[] = [];
+    vi.stubGlobal('IntersectionObserver', class {
+      observe(el: Element): void { observed.push(el); }
+      unobserve(): void {}
+      disconnect(): void {}
+    });
+    try {
+      const m1 = { ...vod('10', 'Movie One'), poster: 'http://host/lazy1.jpg' };
+      await openWith([{ id: '1', name: 'Cat A' }], [m1]);
+      const img = container.querySelector('.catalog-tile[data-item-id="10"] img.catalog-poster')!;
+      expect(img.hasAttribute('src')).toBe(false);
+      expect(img.getAttribute('data-lazy-src')).toBe('http://host/lazy1.jpg');
+      const track = img.closest('[data-lazy-root]')!;
+      expect(track.classList.contains('catalog-rail-track')).toBe(true);
+      expect(track.parentElement!.closest('[data-lazy-root]')?.classList.contains('catalog-rails'))
+        .toBe(true);
+      expect(observed).toContain(track.parentElement!.closest('[data-lazy-root]'));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('updates the hero title and backdrop to the focused movie', async () => {
     const m1 = { accountId: 'x1', streamId: '10', name: 'Movie One', poster: 'http://host/p1.jpg', rating: '', categoryId: '1', containerExtension: 'mp4' };
     const m2 = { accountId: 'x1', streamId: '11', name: 'Movie Two', poster: 'http://host/p2.jpg', rating: '', categoryId: '1', containerExtension: 'mp4' };

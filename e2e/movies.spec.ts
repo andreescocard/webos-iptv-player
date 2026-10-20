@@ -19,13 +19,15 @@ const SAMPLE_ASS = [
   '',
 ].join('\n');
 
+const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
 // Seed one Xtream account (enables the tab bar) and stub the player_api.php
 // catalog calls + the get.php/xmltv.php the live path uses. With `subtitles`,
 // get_vod_info advertises an SRT sidecar; with `ass`, an ASS sidecar. The routed
 // .srt/.ass URLs serve small bodies.
 async function seedMovies(
   page: import('@playwright/test').Page,
-  opts: { subtitles?: boolean; ass?: boolean; streams?: number } = {},
+  opts: { subtitles?: boolean; ass?: boolean; streams?: number; posters?: boolean } = {},
 ): Promise<void> {
   await page.route('**/get.php*', (route) =>
     route.fulfill({ status: 200, contentType: 'application/x-mpegurl', body: SAMPLE_M3U }));
@@ -39,7 +41,9 @@ async function seedMovies(
     if (url.includes('get_vod_streams')) {
       const streams = opts.streams
         ? Array.from({ length: opts.streams }, (_, i) => (
-          { stream_id: 100 + i, name: `Movie ${String(i)}`, stream_icon: '', container_extension: 'mp4', category_id: '1' }))
+          { stream_id: 100 + i, name: `Movie ${String(i)}`,
+            stream_icon: opts.posters ? `http://host.example.com:8080/poster/${String(i)}.png` : '',
+            container_extension: 'mp4', category_id: '1' }))
         : [{ stream_id: 10, name: 'Movie One', stream_icon: '', container_extension: 'mp4', category_id: '1' }];
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(streams) });
     }
@@ -63,6 +67,10 @@ async function seedMovies(
       return route.fulfill({ status: 200, contentType: 'application/x-subrip',
         body: '1\n00:00:01,000 --> 00:00:04,000\nHello\n\n2\n00:00:05,000 --> 00:00:07,000\nWorld\n' });
     });
+  }
+  if (opts.posters) {
+    await page.route('**/poster/**', (route) => route.fulfill({
+      status: 200, contentType: 'image/png', body: Buffer.from(TINY_PNG, 'base64') }));
   }
   // The movie file itself: a small response so play() doesn't hang the test.
   await page.route('**/movie/**', (route) =>
@@ -702,4 +710,23 @@ test('a tile the pointer left under the account menu stays dark once the menu cl
   await page.evaluate(() => new Promise<void>((resolve) =>
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await expect(page.locator('#view-movies .focused:not(.focused-parked)')).toHaveCount(0);
+});
+
+test('rail posters load only as their rail scrolls them near', async ({ page }) => {
+  await seedMovies(page, { streams: 20, posters: true });
+  await page.goto('/');
+  await expect(page.locator('#view-channels')).toBeVisible();
+  await enterTab(page, 'movies');
+  const poster = (i: number) => page.locator(
+    `#view-movies .catalog-browse .catalog-tile[data-item-id="${String(100 + i)}"] img.catalog-poster`);
+  await expect(poster(0)).toHaveAttribute('src', /poster\/0\.png$/);
+  // One track width ahead of the visible tiles is fetched; the far end waits.
+  await expect(poster(12)).toHaveAttribute('src', /poster\/12\.png$/);
+  await expect(poster(19)).not.toHaveAttribute('src');
+  await expect(poster(19)).toHaveAttribute('data-lazy-src', /poster\/19\.png$/);
+
+  await page.locator('#view-movies .catalog-browse .catalog-rail-track').first()
+    .evaluate((el) => { el.scrollLeft = el.scrollWidth; });
+  await expect(poster(19)).toHaveAttribute('src', /poster\/19\.png$/);
+  await expect(poster(19)).not.toHaveAttribute('data-lazy-src');
 });

@@ -15,6 +15,7 @@ import { html, raw, Safe, withInstantScroll } from '../utils/dom';
 import { categoryLockBadge, lockBadge } from './parental-badge';
 import { SEE_ALL_ICON } from './icons';
 import { morph } from '../utils/morph';
+import { lazySrc } from '../utils/lazy-images';
 import { StorageService } from '../services/storage-service';
 import {
   catalogParentalRequest,
@@ -929,7 +930,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
 
   protected posterCell(name: string, poster: string): Safe {
     return poster
-      ? html`<img class="catalog-poster" src="${poster}" alt="" loading="lazy" onerror="this.style.display='none'">`
+      ? html`<img class="catalog-poster" ${lazySrc(poster)} alt="" onerror="this.style.display='none'">`
       : html`<div class="catalog-poster catalog-poster-empty">${name.charAt(0)}</div>`;
   }
 
@@ -989,7 +990,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     return html`
       <div class="catalog-rail" data-key="rail:${key}" data-rail-key="${key}">
         <h2 class="catalog-rail-title">${title}</h2>
-        <div class="catalog-rail-track">${items}</div>
+        <div class="catalog-rail-track" data-lazy-root>${items}</div>
       </div>
     `;
   }
@@ -1060,7 +1061,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
               <h1 class="catalog-hero-title">${hero ? this.itemName(hero) : this.kicker}</h1>
               ${fillNote}
             </div>
-            <div class="catalog-rails">
+            <div class="catalog-rails" data-lazy-root>
               <div class="catalog-rails-spacer"></div>
               <div class="catalog-rails-body">
                 ${continueRail}
@@ -1128,7 +1129,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     }
     const range = this.gridVirtualizer.getRange(items.length, viewportWidth, viewportHeight);
     morph(gridLayer, html`
-      <div class="catalog-view catalog-grid" data-nav-container>
+      <div class="catalog-view catalog-grid" data-nav-container data-lazy-root>
         <h1 class="catalog-grid-title">${cat ? cat.name : this.kicker}</h1>
         ${items.length === 0
           ? html`<p class="catalog-hint">${this.gridEmptyMessage}</p>`

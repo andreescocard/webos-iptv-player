@@ -2,6 +2,7 @@ import { Safe } from './dom';
 import { createLogger } from './logger';
 import { isRingAttr, ringClasses } from '../navigation/focus-ring';
 import { Focus } from '../navigation/focus-scope';
+import { observeLazyImages } from './lazy-images';
 
 const log = createLogger('morph');
 
@@ -31,6 +32,7 @@ export function morph(parent: HTMLElement, next: Safe): void {
     held = kept;
     kept = outer;
   }
+  observeLazyImages(parent);
   Focus.afterMorph(parent, held);
 }
 

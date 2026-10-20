@@ -4,6 +4,7 @@ import { Focus, type FocusScope } from '../navigation/focus-scope';
 import { html, raw } from '../utils/dom';
 import { channelLockBadge, seriesLockBadge, vodLockBadge } from './parental-badge';
 import { morph } from '../utils/morph';
+import { lazySrc } from '../utils/lazy-images';
 import { PlaylistService } from '../services/playlist-service';
 import { EpgService } from '../services/epg-service';
 import { ReminderService } from '../services/reminder-service';
@@ -784,7 +785,7 @@ export class Search {
 
   private posterCell(name: string, poster: string): ReturnType<typeof html> {
     return poster
-      ? html`<img class="catalog-poster" src="${poster}" alt="" loading="lazy" onerror="this.style.display='none'">`
+      ? html`<img class="catalog-poster" ${lazySrc(poster)} alt="" onerror="this.style.display='none'">`
       : html`<div class="catalog-poster catalog-poster-empty">${name.charAt(0)}</div>`;
   }
 
@@ -805,7 +806,7 @@ export class Search {
         <div class="catalog-rail-track search-virtual-rail ${
                key === 'channels-rail' ? 'search-channel-rail' : ''
              }"
-             data-search-virtual="${key}" data-search-axis="horizontal">
+             data-search-virtual="${key}" data-search-axis="horizontal" data-lazy-root>
           <div class="search-virtual-rail-spacer"
                style="width:${virtualizer.getTotalSize(items.length)}px">
             ${items.slice(range.start, range.end).map((item, offset) => {
@@ -842,7 +843,7 @@ export class Search {
       }">
         <h2 class="catalog-rail-title">${title}</h2>
         <div class="search-virtual-scroll"
-             data-search-virtual="${key}" data-search-axis="vertical">
+             data-search-virtual="${key}" data-search-axis="vertical" data-lazy-root>
           <div class="search-virtual-list-spacer"
                style="height:${virtualizer.getTotalSize(items.length)}px">
             ${items.slice(range.start, range.end).map((item, offset) => {
@@ -881,7 +882,7 @@ export class Search {
       <div class="search-channel-row" data-focusable data-key="ch:${String(idx)}"
            data-channel-index="${String(idx)}">
         ${ch.logo
-          ? html`<img class="search-row-logo" src="${ch.logo}" alt="" loading="lazy" onerror="this.style.display='none'">`
+          ? html`<img class="search-row-logo" ${lazySrc(ch.logo)} alt="" onerror="this.style.display='none'">`
           : html`<div class="search-row-logo search-row-logo-empty">${ch.name.charAt(0)}</div>`}
         <span class="search-row-name">${raw(channelLockBadge(ch))}${ch.name}</span>
       </div>
@@ -1646,7 +1647,7 @@ export class Search {
     morph(this.container, html`
       <div class="search-view ${isXtream ? '' : 'search-lists'} ${
         hasMixedLists ? 'search-lists-mixed' : ''
-      }" data-nav-container data-search-query="${q}"
+      }" data-nav-container data-lazy-root data-search-query="${q}"
            data-search-pending="${this.queryPending ? 'true' : 'false'}">
         ${q && isXtream && this.catalogFilling(this.account!.id)
           ? html`<p class="catalog-hint search-note" role="status">${t('search.catalogLoading')}</p>`
