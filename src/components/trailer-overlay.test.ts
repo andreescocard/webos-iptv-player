@@ -141,4 +141,26 @@ describe('TrailerOverlay', () => {
     vi.advanceTimersByTime(2001);
     expect(osd.classList.contains('shown')).toBe(false);
   });
+
+  // jsdom ignores blur() on an iframe, so assert the call instead of activeElement.
+  it('takes focus back from the embed so the app keeps the keys', () => {
+    overlay.show(ID, { onFallback });
+    const blur = vi.spyOn(frame()!, 'blur');
+    const focus = vi.spyOn(window, 'focus');
+    frame()!.focus();
+    window.dispatchEvent(new Event('blur'));
+    expect(blur).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(frame()).not.toBeNull();
+    expect(blur).toHaveBeenCalledTimes(1);
+    expect(focus).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes the focus guard on close', () => {
+    overlay.show(ID, { onFallback });
+    const remove = vi.spyOn(window, 'removeEventListener');
+    overlay.hide();
+    expect(remove).toHaveBeenCalledWith('blur', expect.any(Function));
+    remove.mockRestore();
+  });
 });

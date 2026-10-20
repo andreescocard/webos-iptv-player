@@ -36,6 +36,14 @@ export class TrailerOverlay {
   private duration = 0;
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly onMessage = (event: MessageEvent): void => this.handleMessage(event);
+  // A pointer click focuses the cross-origin embed, which would swallow the remote keys.
+  private readonly onWindowBlur = (): void => {
+    setTimeout(() => {
+      if (!this.visible || !this.frame || document.activeElement !== this.frame) return;
+      this.frame.blur();
+      window.focus();
+    }, 0);
+  };
 
   constructor(private readonly id: string) {}
 
@@ -86,6 +94,7 @@ export class TrailerOverlay {
     this.el.appendChild(this.osd);
     document.body.appendChild(this.el);
     window.addEventListener('message', this.onMessage);
+    window.addEventListener('blur', this.onWindowBlur);
     this.loadTimer = setTimeout(() => this.fallback('timeout'), LOAD_TIMEOUT_MS);
     frame.src = `${CONFIG.TRAILER_EMBED_URL}?v=${videoId}`;
     Focus.push(this.scope);
@@ -198,6 +207,7 @@ export class TrailerOverlay {
       this.osdTimer = null;
     }
     window.removeEventListener('message', this.onMessage);
+    window.removeEventListener('blur', this.onWindowBlur);
     // Dropping the frame stops the video and its audio.
     this.frame?.remove();
     this.frame = null;
