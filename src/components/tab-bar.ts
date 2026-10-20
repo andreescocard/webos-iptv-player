@@ -2,7 +2,14 @@ import type { Action, PlaylistEntry } from '../types';
 import { html, raw } from '../utils/dom';
 import { morph } from '../utils/morph';
 import { CONFIG } from '../config';
-import { SEARCH_ICON, UNLOCK_ICON } from './icons';
+import {
+  CALENDAR_ICON,
+  SEARCH_ICON,
+  TAB_LIVE_ICON,
+  TAB_MOVIES_ICON,
+  TAB_SETTINGS_ICON,
+  UNLOCK_ICON,
+} from './icons';
 import { AccountSwitcher, type AccountMenuCloseReason } from './account-switcher';
 
 // `outside` is narrowed to a click on focusable content, which takes input and
@@ -37,6 +44,20 @@ export const SECTIONS = [
 
 export type Section = typeof SECTIONS[number]['id'];
 type SectionDef = typeof SECTIONS[number];
+
+// Trusted icon markup drawn before each tab label.
+// Live is a pulsing red dot (css/tab-bar.css), not a TV icon, so it stays
+// distinct from the Series tab, which now uses the TV icon.
+const LIVE_DOT_ICON = '<span class="tab-bar-live-dot"></span>';
+
+const SECTION_ICONS: Record<Section, string> = {
+  live: LIVE_DOT_ICON,
+  epg: CALENDAR_ICON,
+  movies: TAB_MOVIES_ICON,
+  series: TAB_LIVE_ICON,
+  settings: TAB_SETTINGS_ICON,
+  search: SEARCH_ICON,
+};
 
 // Xtream accounts get the full set; M3U-only accounts have no VOD/series catalog,
 // so they see Live, Guide, Settings and Search only.
@@ -507,7 +528,7 @@ export class TabBar {
           const activeCls = s.id === this.active ? 'active' : '';
           return html`
           <button class="tab-bar-item ${activeCls}"
-                  data-key="${s.id}" data-section="${s.id}" aria-label="${t(s.labelKey)}">${t(s.labelKey)}</button>
+                  data-key="${s.id}" data-section="${s.id}" aria-label="${t(s.labelKey)}"><span class="tab-bar-icon">${raw(SECTION_ICONS[s.id])}</span>${t(s.labelKey)}</button>
         `;
         })}
         <div class="tab-bar-search ${this.searchExpanded ? 'expanded' : ''}" data-key="search-slot" data-morph-preserve></div>

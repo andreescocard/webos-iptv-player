@@ -163,23 +163,33 @@ test('Back to See all jumps straight to it under full animation', async ({ page 
   expect(placement).toEqual({ focused: true, inTrack: true, onScreen: true });
 });
 
-test('Left and Right stop at the ends of All categories', async ({ page }) => {
+test('All categories wraps into a grid that D-pad walks row to row', async ({ page }) => {
   await seedXtream(page, { catalog: 'large' });
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
   await enterTab(page, 'movies');
-  const cats = page.locator('#view-movies .catalog-category-rail .catalog-cat');
+  const cats = page.locator('#view-movies .catalog-category-grid .catalog-cat');
   await expect(cats).toHaveCount(8);
+  const layout = await cats.evaluateAll((els) => els.map((el) => {
+    const r = el.getBoundingClientRect();
+    return { top: Math.round(r.top), right: r.right, left: Math.round(r.left) };
+  }));
+  const perRow = layout.filter((c) => c.top === layout[0].top).length;
+  // Wrapped onto more than one row, with no tile cut off at the right edge.
+  expect(perRow).toBeLessThan(8);
+  expect(Math.max(...layout.map((c) => c.right))).toBeLessThanOrEqual(1920);
+  expect(await page.locator('#view-movies .catalog-category-grid').evaluate(
+    (el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   const focusedKey = () => page.locator('#view-movies .focused').getAttribute('data-key');
   await cats.first().evaluate((el) => el.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true })));
   await expect.poll(focusedKey).toBe('c:1');
-  // SpatialNav would otherwise carry focus off the rail to another rail's tile.
-  await page.keyboard.press('ArrowLeft');
-  await expect.poll(focusedKey).toBe('c:1');
-  for (let i = 0; i < 7; i++) await page.keyboard.press('ArrowRight');
-  await expect.poll(focusedKey).toBe('c:8');
   await page.keyboard.press('ArrowRight');
-  await expect.poll(focusedKey).toBe('c:8');
+  await expect.poll(focusedKey).toBe('c:2');
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(focusedKey).toBe('c:' + String(perRow + 2));
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(focusedKey).toBe('c:2');
+  await expect(page.locator('#view-movies .focused')).toHaveCount(1);
 });
 
 test('gives a scroll-end spacer only to flex containers', async ({ page }) => {
@@ -197,7 +207,7 @@ test('gives a scroll-end spacer only to flex containers', async ({ page }) => {
     })
     .map((el) => el.className));
   await enterTab(page, 'movies');
-  await expect(page.locator('#view-movies .catalog-category-rail')).toBeVisible();
+  await expect(page.locator('#view-movies .catalog-category-grid')).toBeVisible();
   expect(await misplaced()).toEqual([]);
   await enterTab(page, 'epg');
   await expect(page.locator('#view-epg .epg-date-list')).toBeVisible();
@@ -729,4 +739,100 @@ test('rail posters load only as their rail scrolls them near', async ({ page }) 
     .evaluate((el) => { el.scrollLeft = el.scrollWidth; });
   await expect(poster(19)).toHaveAttribute('src', /poster\/19\.png$/);
   await expect(poster(19)).not.toHaveAttribute('data-lazy-src');
+});
+
+test('the hero Play button plays the movie it shows', async ({ page }) => {
+  await seedXtream(page);
+  await routeLiveManifest(page);
+  await page.goto('/');
+  await expect(page.locator('#view-channels')).toBeVisible();
+  await enterTab(page, 'movies');
+  const view = page.locator('#view-movies');
+  await expect(view.locator('.catalog-hero-title')).toHaveText('Movie One');
+  await expect(view.locator('.catalog-hero-plot')).toHaveText('A plot.');
+  await page.keyboard.press('ArrowDown');
+  await expect(view.locator('.catalog-tile[data-item-id="10"].focused')).toHaveCount(1);
+  await page.keyboard.press('ArrowUp');
+  await expect(view.locator('[data-hero-action="play"].focused')).toHaveCount(1);
+  await expect(view.locator('.focused')).toHaveCount(1);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#view-player')).toBeVisible();
+});
+
+// The trailer wrapper page and oEmbed check are stubbed: tests never reach
+// YouTube. The stub stands in for the wrapper and echoes each command it
+// receives to the page, and can raise the player's embedding error once the
+// app starts listening.
+async function stubTrailerEmbed(page: Page, mode: 'ok' | 'error'): Promise<void> {
+  await page.route('https://www.youtube.com/oembed**', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    headers: { 'access-control-allow-origin': '*' }, body: '{}',
+  }));
+  await page.route('https://andreescocard.github.io/webos-iptv-player/pages/trailer.html**', (route) => route.fulfill({
+    status: 200, contentType: 'text/html',
+    body: `<!doctype html><script>window.addEventListener('message', function (e) {
+      var d = {}; try { d = JSON.parse(e.data); } catch (x) {}
+      if (${mode === 'error' ? 'd.event === "listening"' : 'false'}) {
+        parent.postMessage(JSON.stringify({ event: 'onError', info: 150 }), '*');
+      }
+      parent.postMessage(JSON.stringify({ event: 'stub-cmd', func: d.func || d.event }), '*');
+    });</script>`,
+  }));
+  await page.addInitScript(() => {
+    const w = window as unknown as { __cmds: string[]; __opened: string[] };
+    w.__cmds = [];
+    w.__opened = [];
+    window.addEventListener('message', (e) => {
+      try {
+        const d = JSON.parse(String(e.data)) as { event?: string; func?: string };
+        if (d.event === 'stub-cmd' && d.func) w.__cmds.push(d.func);
+      } catch { /* not ours */ }
+    });
+    window.open = ((url?: string | URL) => { w.__opened.push(String(url)); return {} as Window; }) as typeof window.open;
+  });
+}
+
+async function openHeroTrailer(page: Page): Promise<void> {
+  await page.goto('/');
+  await expect(page.locator('#view-channels')).toBeVisible();
+  await enterTab(page, 'movies');
+  const view = page.locator('#view-movies');
+  await expect(view.locator('.catalog-hero-plot')).toHaveText('A plot.');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowRight');
+  await expect(view.locator('[data-hero-action="trailer"].focused')).toHaveCount(1);
+  await page.keyboard.press('Enter');
+}
+
+test('the hero Trailer plays inline; OK pauses and Back closes', async ({ page }) => {
+  await seedXtream(page);
+  await routeLiveManifest(page);
+  await stubTrailerEmbed(page, 'ok');
+  await openHeroTrailer(page);
+  const frame = page.locator('.trailer-frame');
+  await expect(frame).toHaveAttribute('src', /trailer\.html\?v=abcdefghijk$/);
+  // Commands sent before the frame has loaded would be dropped.
+  await expect.poll(() => page.evaluate(
+    () => (window as unknown as { __cmds: string[] }).__cmds)).toContain('listening');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(
+    () => (window as unknown as { __cmds: string[] }).__cmds)).toContain('pauseVideo');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(
+    () => (window as unknown as { __cmds: string[] }).__cmds)).toContain('playVideo');
+  await page.keyboard.press('Escape');
+  await expect(frame).toHaveCount(0);
+  await expect(page.locator('#view-movies [data-hero-action="trailer"].focused')).toHaveCount(1);
+});
+
+test('a disabled embed closes the player and shows the unavailable notice', async ({ page }) => {
+  await seedXtream(page);
+  await routeLiveManifest(page);
+  await stubTrailerEmbed(page, 'error');
+  await openHeroTrailer(page);
+  await expect(page.locator('.toast.visible', { hasText: 'Trailer unavailable' })).toBeVisible();
+  await expect(page.locator('.trailer-frame')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(
+    () => (window as unknown as { __opened: string[] }).__opened)).toEqual([]);
 });

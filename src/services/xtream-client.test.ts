@@ -322,7 +322,8 @@ describe('XtreamClient VOD', () => {
   it('parses VOD info, tolerating alternate field names', async () => {
     fetchTextMock.mockResolvedValue(JSON.stringify({
       info: { plot: 'A plot', cast: 'Actor', director: 'Dir', genre: 'Drama',
-        release_date: '2020-01-01', duration_secs: 5400, cover_big: 'http://host/p.png' },
+        release_date: '2020-01-01', duration_secs: 5400, cover_big: 'http://host/p.png',
+        backdrop_path: ['', 'http://host/b.jpg'], youtube_trailer: 'dQw4w9WgXcQ' },
       movie_data: { stream_id: 10 },
     }));
     const info = await createXtreamClient(creds).getVodInfo('10');
@@ -334,7 +335,8 @@ describe('XtreamClient VOD', () => {
     );
     expect(info).toEqual({
       plot: 'A plot', cast: 'Actor', director: 'Dir', genre: 'Drama',
-      releaseDate: '2020-01-01', durationSecs: 5400, poster: 'http://host/p.png', subtitles: [],
+      releaseDate: '2020-01-01', durationSecs: 5400, poster: 'http://host/p.png',
+      backdrop: 'http://host/b.jpg', trailer: 'dQw4w9WgXcQ', subtitles: [],
       imdbId: '', tmdbId: '', year: 2020,
     });
   });
@@ -507,6 +509,8 @@ describe('XtreamClient Series', () => {
         releaseDate: '2021-02-03',
         episode_run_time: [45],
         cover: 'http://host/series.png',
+        backdrop_path: 'http://host/series-wide.jpg',
+        youtube_trailer: 'dQw4w9WgXcQ',
         rating: '8.4',
         imdb_id: 'tt1234567',
         tmdb_id: '7654',
@@ -534,6 +538,8 @@ describe('XtreamClient Series', () => {
       releaseDate: '2021-02-03',
       episodeRunTimeMins: 45,
       poster: 'http://host/series.png',
+      backdrop: 'http://host/series-wide.jpg',
+      trailer: 'dQw4w9WgXcQ',
       rating: '8.4',
       imdbId: '1234567',
       tmdbId: '7654',
@@ -596,6 +602,8 @@ describe('XtreamClient Series', () => {
       releaseDate: '',
       episodeRunTimeMins: 0,
       poster: '',
+      backdrop: '',
+      trailer: '',
       rating: '',
       imdbId: '',
       tmdbId: '',

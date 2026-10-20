@@ -180,8 +180,8 @@ test('shows Resume on return and keeps three movie actions at a stable height', 
 
   await expect(page.locator('#view-movies')).toBeVisible();
   await expect(page.locator('#view-movies [data-action="resume"]')).toBeVisible();
-  const actions = page.locator('#view-movies .detail-btn');
-  await expect(actions).toHaveCount(3);
+  const actions = page.locator('#view-movies .movies-detail .detail-btn');
+  await expect(actions).toHaveCount(4);
   const layout = await actions.evaluateAll((buttons) => buttons.map((button) => ({
     height: (button as HTMLElement).offsetHeight,
     top: (button as HTMLElement).offsetTop,
@@ -215,8 +215,8 @@ test('keeps three pseudo-localized movie actions on one row without clipping', a
   await enterTab(page, 'movies');
   await focusAndSelect(page, '#view-movies [data-watchlist-item="10"]');
 
-  const actions = page.locator('#view-movies .detail-btn');
-  await expect(actions).toHaveCount(3);
+  const actions = page.locator('#view-movies .movies-detail .detail-btn');
+  await expect(actions).toHaveCount(4);
   await expect(actions.first()).toContainText('[!!');
   const layout = await page.locator('#view-movies .detail-actions').evaluate((row) => ({
     clientWidth: row.clientWidth,

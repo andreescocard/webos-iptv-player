@@ -126,6 +126,73 @@ export const IT_MESSAGES = {
   'catalog.director': 'Regia',
   'catalog.play': 'Riproduci',
   'catalog.playFromStart': 'Riproduci dall’inizio',
+  'catalog.moreInfo': 'Altre info',
+
+  'catalog.trailer': 'Trailer',
+
+  'catalog.trailerFailed': 'Impossibile aprire il trailer.',
+
+
+  'catalog.trailerNotFound': 'Trailer non trovato.',
+  'catalog.trailerUnavailable': 'Trailer non disponibile',
+
+  'catalog.showMore': 'Mostra altro',
+
+  'catalog.showLess': 'Mostra meno',
+
+  'genre.action': 'Azione',
+
+  'genre.actionAdventure': 'Azione e avventura',
+
+  'genre.adventure': 'Avventura',
+
+  'genre.animation': 'Animazione',
+
+  'genre.comedy': 'Commedia',
+
+  'genre.crime': 'Crime',
+
+  'genre.documentary': 'Documentario',
+
+  'genre.drama': 'Drammatico',
+
+  'genre.family': 'Famiglia',
+
+  'genre.fantasy': 'Fantasy',
+
+  'genre.history': 'Storia',
+
+  'genre.horror': 'Horror',
+
+  'genre.kids': 'Bambini',
+
+  'genre.music': 'Musica',
+
+  'genre.mystery': 'Mistero',
+
+  'genre.news': 'Notizie',
+
+  'genre.reality': 'Reality',
+
+  'genre.romance': 'Romantico',
+
+  'genre.scifi': 'Fantascienza',
+
+  'genre.scifiFantasy': 'Fantascienza e fantasy',
+
+  'genre.soap': 'Soap opera',
+
+  'genre.talk': 'Talk show',
+
+  'genre.thriller': 'Thriller',
+
+  'genre.tvMovie': 'Film TV',
+
+  'genre.war': 'Guerra',
+
+  'genre.warPolitics': 'Guerra e politica',
+
+  'genre.western': 'Western',
   'catalog.addWatchlist': 'Aggiungi alla mia lista',
   'catalog.removeWatchlist': 'Rimuovi dalla mia lista',
   'catalog.watchlistAdded': 'Aggiunto alla mia lista',
@@ -314,6 +381,12 @@ export const IT_MESSAGES = {
   'settings.apiKey': 'Chiave API',
   'settings.assrtToken': 'Token API',
   'settings.assrtDescription': 'Assrt.net offre principalmente sottotitoli in cinese. Il token è facoltativo; lascia vuoto per usare il token condiviso.',
+
+  'settings.trailers': 'Trailer',
+
+  'settings.tmdbApiKey': 'Chiave API TMDB',
+
+  'settings.tmdbApiKeyHint': 'Facoltativo. Migliora la ricerca dei trailer.',
   'settings.username': 'Nome utente',
   'settings.password': 'Password',
   'settings.dataManagement': 'Gestione dati',

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { PlaylistEntry, WatchlistEntry, WatchlistKind } from '../types';
 
 const { catalogMock, storageMock, watchlistState, toastMock } = vi.hoisted(() => {
@@ -81,22 +81,128 @@ describe('Series browse + grid', () => {
     expect(container.querySelector('.catalog-tile[data-item-id="s1"]')?.textContent).toContain('Series One');
   });
 
-  it('updates the hero title and backdrop to the focused series', async () => {
-    const s1 = { accountId: 'x1', seriesId: 's1', name: 'Series One', poster: 'http://host/a1.jpg', rating: '', categoryId: '1' };
-    const s2 = { accountId: 'x1', seriesId: 's2', name: 'Series Two', poster: 'http://host/a2.jpg', rating: '', categoryId: '1' };
-    await openWith([{ id: '1', name: 'Cat A' }], [s1, s2]);
-    const hero = container.querySelector<HTMLElement>('.catalog-hero')!;
+  describe('hero', () => {
+    const s1 = { ...series('s1', 'Series One'), poster: 'http://host/a1.jpg' };
+    const s2 = { ...series('s2', 'Series Two'), poster: 'http://host/a2.jpg', rating: '8.1' };
+    const ep = (id: string, n: number, poster = '') => ({
+      id, title: `Episode ${String(n)}`, season: 1, episode: n, containerExtension: 'mkv',
+      durationSecs: 600, plot: '', poster, subtitles: [],
+    });
+    const info = (extra: Record<string, unknown> = {}) => ({
+      plot: '', cast: '', director: '', genre: '', releaseDate: '', episodeRunTimeMins: 0,
+      poster: '', backdrop: '', rating: '', imdbId: '', tmdbId: '', year: 0,
+      seasons: [1], episodesBySeason: { 1: [ep('e1', 1), ep('e2', 2)] }, ...extra,
+    });
+    const hover = (selector: string) => container.querySelector(selector)!
+      .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
     const title = () => container.querySelector('.catalog-hero-title')?.textContent;
+    const settle = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
 
-    container.querySelector('.catalog-tile[data-item-id="s2"]')!
-      .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
-    expect(title()).toBe('Series Two');
-    expect(hero.style.backgroundImage).toContain('a2.jpg');
+    beforeEach(() => { vi.useFakeTimers(); });
+    afterEach(() => { vi.useRealTimers(); });
 
-    container.querySelector('.catalog-tile[data-item-id="s1"]')!
-      .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
-    expect(title()).toBe('Series One');
-    expect(hero.style.backgroundImage).toContain('a1.jpg');
+    it('follows the focused series after a pause, with its backdrop and facts', async () => {
+      catalogMock.loadSeriesInfo.mockImplementation((_a: unknown, id: string) => Promise.resolve(id === 's2'
+        ? info({ backdrop: 'http://host/w2.jpg', genre: 'Drama', year: 2021, plot: 'A series plot.' })
+        : info()));
+      await openWith([{ id: '1', name: 'Cat A' }], [s1, s2]);
+      await settle();
+      expect(container.querySelector('.catalog-hero-poster')?.getAttribute('src')).toBe('http://host/a1.jpg');
+      hover('.catalog-tile[data-item-id="s2"]');
+      expect(title()).toBe('Series One');
+      vi.advanceTimersByTime(500);
+      expect(title()).toBe('Series Two');
+      await settle();
+      expect(container.querySelector('.catalog-hero-backdrop')?.getAttribute('src')).toBe('http://host/w2.jpg');
+      expect(Array.from(container.querySelectorAll('.catalog-hero-meta .catalog-fact')).map((el) => el.textContent)).toEqual(['8.1', '2021', 'Drama']);
+      expect(container.querySelector('.catalog-hero-plot')?.textContent).toBe('A series plot.');
+    });
+
+    it('plays the first episode when nothing was started', async () => {
+      catalogMock.loadSeriesInfo.mockResolvedValue(info());
+      const { view, handlers } = await openWith([{ id: '1', name: 'Cat A' }], [s1]);
+      await settle();
+      const play = container.querySelector<HTMLElement>('[data-hero-action="play"]')!;
+      expect(play.textContent).toContain('Play');
+      hover('[data-hero-action="play"]');
+      view.handleAction('select');
+      await settle();
+      expect(handlers.onPlayVod).toHaveBeenCalledWith(expect.objectContaining({
+        itemId: 'e1', kind: 'episode', parentalItemId: 's1', resumeSecs: 0,
+        episodeQueue: [expect.objectContaining({ itemId: 'e2' })],
+      }));
+    });
+
+    it('resumes the episode the series was left on', async () => {
+      catalogMock.loadSeriesInfo.mockResolvedValue(info());
+      storageMock.getResumeList.mockReturnValue([{
+        accountId: 'x1', kind: 'episode', itemId: 'e2', name: 'Series One — S1E2', poster: '', ext: 'mkv',
+        position: 300, duration: 600, updatedAt: 1, watchlistOwner: { kind: 'series', itemId: 's1' },
+      }]);
+      const { view, handlers } = await openWith([{ id: '1', name: 'Cat A' }], [s1]);
+      expect(container.querySelector('[data-hero-action="play"]')?.textContent).toContain('Resume');
+      hover('[data-hero-action="play"]');
+      view.handleAction('select');
+      expect(handlers.onPlayVod).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'e2', resumeSecs: 300 }));
+    });
+
+    it('opens the detail when the series has no episodes to play', async () => {
+      catalogMock.loadSeriesInfo.mockResolvedValue(info({ seasons: [], episodesBySeason: {} }));
+      const { view, handlers } = await openWith([{ id: '1', name: 'Cat A' }], [s1]);
+      hover('[data-hero-action="play"]');
+      view.handleAction('select');
+      await settle();
+      expect(handlers.onPlayVod).not.toHaveBeenCalled();
+      expect(container.querySelector('.series-detail .detail-title')?.textContent).toBe('Series One');
+    });
+  });
+
+  describe('episode stills', () => {
+    const openDetailWith = async (episodes: unknown[], resume: unknown = null) => {
+      catalogMock.loadSeriesInfo.mockResolvedValue({
+        plot: '', cast: '', director: '', genre: '', releaseDate: '', episodeRunTimeMins: 0,
+        poster: '', rating: '', imdbId: '', tmdbId: '', year: 0,
+        seasons: [1], episodesBySeason: { 1: episodes },
+      });
+      storageMock.getResume.mockImplementation(((_a: string, _k: string, id: string) =>
+        (id === 'e1' ? resume : null)) as never);
+      const { view } = await openWith();
+      container.querySelector('.catalog-tile[data-item-id="s1"]')!
+        .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+      view.handleAction('select');
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      return view;
+    };
+    const episode = (id: string, poster: string) => ({
+      id, title: `Episode ${id}`, season: 1, episode: 1, containerExtension: 'mp4',
+      durationSecs: 600, plot: '', poster, subtitles: [],
+    });
+
+    it('shows a still with the play badge and resume progress over it', async () => {
+      await openDetailWith([episode('e1', 'http://host/still1.jpg')], { position: 150, duration: 600 });
+      const row = container.querySelector('.episode-row[data-episode-id="e1"]')!;
+      const img = row.querySelector('.episode-thumb img.episode-thumb-img')!;
+      expect(img.getAttribute('src') ?? img.getAttribute('data-lazy-src')).toBe('http://host/still1.jpg');
+      expect(row.querySelector('.episode-thumb .episode-thumb-play svg')).not.toBeNull();
+      expect(row.querySelector<HTMLElement>('.episode-progress-fill')?.style.width).toBe('25%');
+      expect(row.querySelector('.episode-badge')).toBeNull();
+      expect(row.closest('[data-lazy-root]')?.classList.contains('series-detail')).toBe(true);
+    });
+
+    it('keeps the plain badge row without a still', async () => {
+      await openDetailWith([episode('e1', '')]);
+      const row = container.querySelector('.episode-row[data-episode-id="e1"]')!;
+      expect(row.querySelector('.episode-thumb')).toBeNull();
+      expect(row.querySelector('.episode-badge svg')).not.toBeNull();
+    });
+  });
+
+  it('drops a category prefix the provider puts on every category', async () => {
+    const cats = [{ id: '1', name: 'Serie ∤ Alpha' }, { id: '2', name: 'Serie ∤ Bravo Max' }];
+    catalogMock.loadSeriesInfo.mockResolvedValue(null);
+    await openWith(cats, [series('s1', 'Series One')]);
+    const titles = Array.from(container.querySelectorAll('.catalog-rail-title')).map((el) => el.textContent);
+    expect(titles).toEqual(['Alpha', 'Bravo Max']);
   });
 
   it('shows a Continue rail from the episode resume list and resumes an episode directly', async () => {
@@ -469,8 +575,7 @@ describe('Series detail', () => {
     const { view, handlers } = await openWith();
     await openDetail(view);
 
-    expect(container.querySelector('.detail-meta')?.textContent)
-      .toContain('2021  ·  45 min  ·  Drama  ·  8.4');
+    expect(Array.from(container.querySelectorAll('.detail-meta .catalog-fact')).map((el) => el.textContent)).toEqual(['8.4', '2021', '45 min', 'Drama']);
     expect(container.querySelector('.detail-plot')?.textContent).toBe('Series plot.');
     expect(container.querySelectorAll('.detail-cast')[0]?.textContent)
       .toContain('Cast Actor 1, Actor 2');
@@ -511,8 +616,7 @@ describe('Series detail', () => {
     const { view } = await openWith();
     await openDetail(view);
 
-    expect(container.querySelector('.detail-meta')?.textContent)
-      .toContain('2022  ·  45 min  ·  Drama  ·  8.4');
+    expect(Array.from(container.querySelectorAll('.detail-meta .catalog-fact')).map((el) => el.textContent)).toEqual(['8.4', '2022', '45 min', 'Drama']);
   });
 
   it('switches season and plays that season\'s episode with its own container extension', async () => {

@@ -19,6 +19,9 @@ export const CONFIG = {
   SERVICE_ID: __SERVICE_ID__,
   SERVICE_HOST: '127.0.0.1',
 
+  // Wrapper page that embeds the trailer with a real Referer (the app runs from file://).
+  TRAILER_EMBED_URL: 'https://andreescocard.github.io/webos-iptv-player/pages/trailer.html',
+
   DEFAULT_PLAYLIST_REFRESH_INTERVAL_MS: 6 * 60 * 60 * 1000,
   WORKER_IDLE_TERMINATION_MS: 1000,
   PLAYLIST_CACHE_WRITE_DELAY_MS: 1200,
@@ -103,6 +106,8 @@ export const CONFIG = {
     RESUME_FINISH_PAD: 30,               // within this of the end = finished (clear the resume point)
     ARCHIVE_TTL_MS: 10 * 60 * 1000,      // per-channel get_simple_data_table freshness
     WATCHLIST_MAX_ITEMS: 200,            // per account and content type
+    HERO_FOLLOW_DELAY_MS: 500,           // focus rests this long before the browse hero follows it
+    HERO_META_CACHE_ITEMS: 50,           // hero plot/backdrop summaries kept in memory per section
   },
 
   // Catch-up (time-shift) resume and history store tuning.

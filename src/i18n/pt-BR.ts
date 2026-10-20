@@ -128,6 +128,73 @@ export const PT_BR_MESSAGES = {
   'catalog.director': 'Direção',
   'catalog.play': 'Assistir',
   'catalog.playFromStart': 'Assistir do início',
+  'catalog.moreInfo': 'Mais informações',
+
+  'catalog.trailer': 'Trailer',
+
+  'catalog.trailerFailed': 'Não foi possível abrir o trailer.',
+
+
+  'catalog.trailerNotFound': 'Trailer não encontrado',
+  'catalog.trailerUnavailable': 'Trailer indisponível',
+
+  'catalog.showMore': 'Ver mais',
+
+  'catalog.showLess': 'Ver menos',
+
+  'genre.action': 'Ação',
+
+  'genre.actionAdventure': 'Ação e aventura',
+
+  'genre.adventure': 'Aventura',
+
+  'genre.animation': 'Animação',
+
+  'genre.comedy': 'Comédia',
+
+  'genre.crime': 'Crime',
+
+  'genre.documentary': 'Documentário',
+
+  'genre.drama': 'Drama',
+
+  'genre.family': 'Família',
+
+  'genre.fantasy': 'Fantasia',
+
+  'genre.history': 'História',
+
+  'genre.horror': 'Terror',
+
+  'genre.kids': 'Infantil',
+
+  'genre.music': 'Música',
+
+  'genre.mystery': 'Mistério',
+
+  'genre.news': 'Notícias',
+
+  'genre.reality': 'Reality',
+
+  'genre.romance': 'Romance',
+
+  'genre.scifi': 'Ficção científica',
+
+  'genre.scifiFantasy': 'Ficção científica e fantasia',
+
+  'genre.soap': 'Novela',
+
+  'genre.talk': 'Talk show',
+
+  'genre.thriller': 'Suspense',
+
+  'genre.tvMovie': 'Filme para TV',
+
+  'genre.war': 'Guerra',
+
+  'genre.warPolitics': 'Guerra e política',
+
+  'genre.western': 'Faroeste',
   'catalog.addWatchlist': 'Adicionar à Minha lista',
   'catalog.removeWatchlist': 'Remover da Minha lista',
   'catalog.watchlistAdded': 'Adicionado à Minha lista',
@@ -316,6 +383,12 @@ export const PT_BR_MESSAGES = {
   'settings.apiKey': 'Chave da API',
   'settings.assrtToken': 'Token da API',
   'settings.assrtDescription': 'O Assrt.net oferece principalmente legendas em chinês. O token é opcional; deixe em branco para usar o token compartilhado.',
+
+  'settings.trailers': 'Trailers',
+
+  'settings.tmdbApiKey': 'Chave da API do TMDB',
+
+  'settings.tmdbApiKeyHint': 'Opcional. Melhora a busca de trailers.',
   'settings.username': 'Nome de usuário',
   'settings.password': 'Senha',
   'settings.dataManagement': 'Gerenciamento de dados',

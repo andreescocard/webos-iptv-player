@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Action, PlaylistEntry, WatchlistEntry, WatchlistKind } from '../types';
 
-const { catalogMock, storageMock, watchlistState, toastMock } = vi.hoisted(() => {
+const { catalogMock, storageMock, watchlistState, toastMock, trailerMock } = vi.hoisted(() => {
   const watchlistState = { entries: [] as WatchlistEntry[] };
   return {
     catalogMock: { loadVodCategories: vi.fn(), loadVodStreams: vi.fn(), loadVodInfo: vi.fn(), getCatalogFill: vi.fn((): { done: number; total: number } | null => null), onCatalogFillChanged: vi.fn() },
@@ -24,11 +24,13 @@ const { catalogMock, storageMock, watchlistState, toastMock } = vi.hoisted(() =>
       }),
     },
     toastMock: { showToast: vi.fn() },
+    trailerMock: { resolveTrailer: vi.fn() },
   };
 });
 vi.mock('../services/xtream-catalog', () => catalogMock);
 vi.mock('../services/storage-service', () => ({ StorageService: storageMock }));
 vi.mock('./toast', () => ({ showToast: toastMock.showToast }));
+vi.mock('../services/trailer-service', () => trailerMock);
 
 import { Movies } from './movies';
 import { Focus, Tier } from '../navigation/focus-scope';
@@ -111,22 +113,196 @@ describe('Movies browse + grid', () => {
     }
   });
 
-  it('updates the hero title and backdrop to the focused movie', async () => {
-    const m1 = { accountId: 'x1', streamId: '10', name: 'Movie One', poster: 'http://host/p1.jpg', rating: '', categoryId: '1', containerExtension: 'mp4' };
-    const m2 = { accountId: 'x1', streamId: '11', name: 'Movie Two', poster: 'http://host/p2.jpg', rating: '', categoryId: '1', containerExtension: 'mp4' };
-    await openWith([{ id: '1', name: 'Cat A' }], [m1, m2]);
-    const hero = container.querySelector<HTMLElement>('.catalog-hero')!;
+  describe('hero', () => {
+    const m1 = { ...vod('10', 'Movie One'), poster: 'http://host/p1.jpg', rating: '7.5' };
+    const m2 = { ...vod('11', 'Movie Two'), poster: 'http://host/p2.jpg' };
+    const m3 = { ...vod('12', 'Movie Three'), poster: 'http://host/p3.jpg' };
+    const info = (extra: Record<string, unknown> = {}) => ({
+      plot: '', cast: '', director: '', genre: '', releaseDate: '', durationSecs: 0,
+      poster: '', backdrop: '', subtitles: [], imdbId: '', tmdbId: '', year: 0, ...extra,
+    });
+    const hover = (id: string) => container.querySelector(`.catalog-tile[data-item-id="${id}"]`)!
+      .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
     const title = () => container.querySelector('.catalog-hero-title')?.textContent;
+    const settle = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
 
-    container.querySelector('.catalog-tile[data-item-id="11"]')!
-      .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
-    expect(title()).toBe('Movie Two');
-    expect(hero.style.backgroundImage).toContain('p2.jpg');
+    beforeEach(() => { vi.useFakeTimers(); });
+    afterEach(() => { vi.useRealTimers(); });
 
-    container.querySelector('.catalog-tile[data-item-id="10"]')!
-      .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
-    expect(title()).toBe('Movie One');
-    expect(hero.style.backgroundImage).toContain('p1.jpg');
+    it('follows the focused tile once focus rests, not every tile it passes', async () => {
+      catalogMock.loadVodInfo.mockResolvedValue(null);
+      await openWith([{ id: '1', name: 'Cat A' }], [m1, m2, m3]);
+      expect(title()).toBe('Movie One');
+      hover('11');
+      vi.advanceTimersByTime(300);
+      hover('12');
+      vi.advanceTimersByTime(499);
+      expect(title()).toBe('Movie One');
+      vi.advanceTimersByTime(1);
+      expect(title()).toBe('Movie Three');
+      const asked = catalogMock.loadVodInfo.mock.calls.map((call) => call[1]);
+      expect(asked).toEqual(['10', '12']);
+    });
+
+    it('shows the backdrop, facts, and plot from the detail info', async () => {
+      catalogMock.loadVodInfo.mockResolvedValue(info({
+        plot: 'A plot.', genre: 'Drama', releaseDate: '2020-01-01', backdrop: 'http://host/b1.jpg',
+      }));
+      await openWith([{ id: '1', name: 'Cat A' }], [m1, m2]);
+      await settle();
+      expect(container.querySelector('.catalog-hero-backdrop')?.getAttribute('src')).toBe('http://host/b1.jpg');
+      expect(container.querySelector('.catalog-hero-poster')).toBeNull();
+      expect(Array.from(container.querySelectorAll('.catalog-hero-meta .catalog-fact')).map((el) => el.textContent)).toEqual(['7.5', '2020', 'Drama']);
+      expect(container.querySelector('.catalog-hero-plot')?.textContent).toBe('A plot.');
+    });
+
+    it('falls back to the list item when the detail info fails', async () => {
+      catalogMock.loadVodInfo.mockRejectedValue(new Error('down'));
+      await openWith([{ id: '1', name: 'Cat A' }], [m1, m2]);
+      await settle();
+      expect(title()).toBe('Movie One');
+      expect(container.querySelector('.catalog-hero-poster')?.getAttribute('src')).toBe('http://host/p1.jpg');
+      expect(container.querySelector('.catalog-hero-backdrop')).toBeNull();
+      expect(Array.from(container.querySelectorAll('.catalog-hero-meta .catalog-fact')).map((el) => el.textContent)).toEqual(['7.5']);
+      expect(container.querySelector('.catalog-hero-plot')).toBeNull();
+      expect(container.querySelectorAll('.catalog-hero-actions [data-hero-action]')).toHaveLength(3);
+    });
+
+    it('caches details it fetched and aborts a request the hero moved past', async () => {
+      const signals: AbortSignal[] = [];
+      catalogMock.loadVodInfo.mockImplementation((_a: unknown, id: string, signal: AbortSignal) => {
+        signals.push(signal);
+        return id === '11' ? new Promise(() => undefined) : Promise.resolve(info({ plot: `Plot ${id}` }));
+      });
+      await openWith([{ id: '1', name: 'Cat A' }], [m1, m2, m3]);
+      await settle();
+      hover('11');
+      vi.advanceTimersByTime(500);
+      hover('12');
+      vi.advanceTimersByTime(500);
+      await settle();
+      expect(signals[1].aborted).toBe(true);
+      expect(container.querySelector('.catalog-hero-plot')?.textContent).toBe('Plot 12');
+      hover('10');
+      vi.advanceTimersByTime(500);
+      await settle();
+      expect(container.querySelector('.catalog-hero-plot')?.textContent).toBe('Plot 10');
+      expect(catalogMock.loadVodInfo).toHaveBeenCalledTimes(3);
+    });
+
+    it('starts on the first tile, and Down from the hero returns to it', async () => {
+      catalogMock.loadVodInfo.mockResolvedValue(null);
+      const { view } = await openWith([{ id: '1', name: 'Cat A' }], [m1, m2]);
+      expect(view.focusScope.focusKey).toContain('i:1:10');
+      hover('11');
+      container.querySelector('[data-hero-action="info"]')!
+        .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+      expect(view.focusScope.focusKey).toContain('hero:info');
+      // Focus on its buttons lands a pending switch at once.
+      expect(title()).toBe('Movie Two');
+      view.handleAction('left');
+      expect(view.focusScope.focusKey).toContain('hero:trailer');
+      view.handleAction('left');
+      expect(view.focusScope.focusKey).toContain('hero:play');
+      view.handleAction('left');
+      expect(view.focusScope.focusKey).toContain('hero:play');
+      view.handleAction('down');
+      expect(view.focusScope.focusKey).toContain('i:1:11');
+    });
+
+    it('plays or resumes the hero movie, and More info opens its detail', async () => {
+      catalogMock.loadVodInfo.mockResolvedValue(info({ subtitles: [] }));
+      storageMock.getResume.mockReturnValue({ position: 120 } as never);
+      const { view, handlers } = await openWith([{ id: '1', name: 'Cat A' }], [m1]);
+      const play = container.querySelector<HTMLElement>('[data-hero-action="play"]')!;
+      expect(play.textContent).toContain('Resume');
+      play.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+      view.handleAction('select');
+      await settle();
+      expect(handlers.onPlayVod).toHaveBeenCalledWith(expect.objectContaining({
+        itemId: '10', title: 'Movie One', resumeSecs: 120,
+      }));
+      container.querySelector('[data-hero-action="info"]')!
+        .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+      view.handleAction('select');
+      expect(container.querySelector('.movies-detail .detail-title')?.textContent).toBe('Movie One');
+    });
+  });
+
+  it('shows a middle-dot where a category name has an exotic separator', async () => {
+    catalogMock.loadVodInfo.mockResolvedValue(null);
+    await openWith([{ id: '1', name: 'Anime ∤ Dublado' }, { id: '2', name: 'Drama' }], [vod('10', 'Movie One')]);
+    const labels = Array.from(container.querySelectorAll('.catalog-rail-title')).map((el) => el.textContent);
+    expect(labels).toContain('Anime · Dublado');
+  });
+
+  describe('trailer', () => {
+    const rich = { plot: 'A plot.', cast: '', director: '', genre: 'Drama', releaseDate: '2020-05-01', durationSecs: 0, poster: '', imdbId: '', tmdbId: '99', year: 2020, trailer: 'dQw4w9WgXcQ', subtitles: [] };
+    const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
+    const press = (sel: string, view: { handleAction(a: Action): void }) => {
+      container.querySelector(sel)!.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+      view.handleAction('select');
+    };
+
+    it('resolves the panel link and TMDB id from the hero, showing a loading state', async () => {
+      catalogMock.loadVodInfo.mockResolvedValue(rich);
+      let finish: (v: unknown) => void = () => {};
+      trailerMock.resolveTrailer.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+      const { view } = await openWith([{ id: '1', name: 'Cat A' }], [vod('10', 'Movie One')]);
+      await flush();
+      press('[data-hero-action="trailer"]', view);
+      expect(trailerMock.resolveTrailer).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'movie', title: 'Movie One', year: '2020', panelTrailer: 'dQw4w9WgXcQ', tmdbId: '99',
+      }));
+      const button = container.querySelector('[data-hero-action="trailer"]')!;
+      expect(button.getAttribute('aria-busy')).toBe('true');
+      finish({ kind: 'video', videoId: 'abcdefghijk', source: 'tmdb' });
+      await flush();
+      expect(document.querySelector('.trailer-frame')?.getAttribute('src')).toContain('trailer.html?v=abcdefghijk');
+      expect(container.querySelector('[data-hero-action="trailer"]')!.getAttribute('aria-busy')).toBe('false');
+      expect(toastMock.showToast).not.toHaveBeenCalled();
+      view.deactivate();
+      expect(document.querySelector('.trailer-frame')).toBeNull();
+    });
+
+    it('shows an unavailable notice when the embed fails', async () => {
+      catalogMock.loadVodInfo.mockResolvedValue(rich);
+      const result = { kind: 'video', videoId: 'abcdefghijk', source: 'tmdb' };
+      trailerMock.resolveTrailer.mockResolvedValue(result);
+      const { view } = await openWith([{ id: '1', name: 'Cat A' }], [vod('10', 'Movie One')]);
+      press('[data-hero-action="trailer"]', view);
+      await flush();
+      const frame = document.querySelector<HTMLIFrameElement>('.trailer-frame')!;
+      window.dispatchEvent(new MessageEvent('message', {
+        data: JSON.stringify({ event: 'onError', info: 101 }), source: frame.contentWindow as Window,
+      }));
+      await flush();
+      expect(toastMock.showToast).toHaveBeenCalledWith('Trailer unavailable');
+      view.deactivate();
+    });
+
+    it('toasts that no trailer was found, from the detail screen too', async () => {
+      catalogMock.loadVodInfo.mockResolvedValue(rich);
+      trailerMock.resolveTrailer.mockResolvedValue({ kind: 'none' });
+      const { view } = await openWith([{ id: '1', name: 'Cat A' }], [vod('10', 'Movie One')]);
+      press('[data-hero-action="info"]', view);
+      await flush();
+      press('[data-action="trailer"]', view);
+      await flush();
+      expect(trailerMock.resolveTrailer).toHaveBeenCalledWith(expect.objectContaining({ panelTrailer: 'dQw4w9WgXcQ' }));
+      expect(toastMock.showToast).toHaveBeenCalledWith('Trailer not found.');
+    });
+  });
+
+  it('drops a category prefix the provider puts on every category', async () => {
+    const cats = [
+      { id: '1', name: 'Movies ∤ Alpha' }, { id: '2', name: 'Movies ∤ Bravo' },
+      { id: '3', name: 'Movies ∤ Charlie' },
+    ];
+    catalogMock.loadVodInfo.mockResolvedValue(null);
+    await openWith(cats, [vod('10', 'Movie One')]);
+    const titles = Array.from(container.querySelectorAll('.catalog-rail-title')).map((el) => el.textContent);
+    expect(titles).toEqual(['Alpha', 'Bravo', 'Charlie']);
   });
 
   it('shows a Continue rail from the resume list', async () => {
@@ -579,7 +755,9 @@ describe('Movies browse + grid', () => {
     view.handleAction('back');
     const logs = vi.spyOn(console, 'log');
     resolve([vod('20', 'Movie Two', '7')]);
-    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(eventLines(logs, 'xtream.view.load.superseded')).toEqual([
       expect.stringMatching(/operation=category mode=vod reason=left$/),
     ]);
@@ -730,7 +908,7 @@ describe('Movies browse + grid', () => {
       .toBe('continue');
   });
 
-  it('returns focus to an All Categories tile beyond the first rendered window', async () => {
+  it('returns focus to an All Categories tile after its grid closes', async () => {
     const cats = Array.from({ length: 60 }, (_, i) => ({ id: String(i + 1), name: `Cat ${String(i + 1)}` }));
     catalogMock.loadVodCategories.mockResolvedValue(cats);
     catalogMock.loadVodStreams.mockResolvedValue([]);
@@ -739,9 +917,9 @@ describe('Movies browse + grid', () => {
     await view.open(account);
     container.querySelector<HTMLElement>('.catalog-cat[data-category-id="1"]')!
       .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
-    for (let i = 0; i < 40; i++) view.handleAction('right');
+    container.querySelector<HTMLElement>('.catalog-cat[data-category-id="41"]')!
+      .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
     expect(focusedKey()).toBe('c:41');
-    expect(container.querySelector('.catalog-cat[data-category-id="1"]')).toBeNull();
     view.handleAction('select');
     await Promise.resolve();
     await Promise.resolve();
@@ -784,7 +962,7 @@ describe('Movies browse + grid', () => {
       const view = await eightFullCategories();
       const { track, tile, writes } = stubRail(1280); // ends exactly at 1500
       keyOnto(view, tile);
-      expect(writes).toEqual([{ value: 1512 - 1000, behavior: 'auto' }]);
+      expect(writes).toEqual([{ value: 1524 - 1000, behavior: 'auto' }]);
       expect(track.style.scrollBehavior).toBe('smooth');
       expect(focusedKey()).toBe(tile.dataset.key);
     });
@@ -793,7 +971,7 @@ describe('Movies browse + grid', () => {
       const view = await eightFullCategories();
       const { tile, writes } = stubRail(1400);
       keyOnto(view, tile);
-      expect(writes).toEqual([{ value: 1632 - 1000, behavior: 'smooth' }]);
+      expect(writes).toEqual([{ value: 1644 - 1000, behavior: 'smooth' }]);
     });
 
     it('leaves the rail alone when a pointer focuses an edge tile', async () => {
@@ -811,9 +989,9 @@ describe('Movies browse + grid', () => {
     expect(container.querySelector('.catalog-see-all')).toBeNull();
   });
 
-  it('virtualizes 50,000 categories and a 50,000-item grid', async () => {
+  it('lists every category as a wrapping tile and virtualizes a 50,000-item grid', async () => {
     const cats = Array.from(
-      { length: 50_000 },
+      { length: 300 },
       (_, i) => ({ id: String(i + 1), name: `Category ${String(i + 1)}` }),
     );
     const streams = Array.from(
@@ -822,9 +1000,8 @@ describe('Movies browse + grid', () => {
     );
     const { view } = await openWith(cats, streams);
 
-    expect(container.querySelectorAll('.catalog-category-rail-cell').length).toBeLessThan(20);
-    expect(container.querySelector<HTMLElement>('.catalog-category-rail-spacer')?.style.width)
-      .toBe(`${String(50_000 * 320)}px`);
+    expect(container.querySelectorAll('.catalog-category-grid .catalog-cat').length).toBe(300);
+    expect(container.querySelector('.catalog-category-rail')).toBeNull();
 
     const category = container.querySelector<HTMLElement>(
       '.catalog-cat[data-category-id="7"]',

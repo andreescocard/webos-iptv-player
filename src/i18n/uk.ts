@@ -136,6 +136,73 @@ export const UK_MESSAGES = {
   'catalog.director': 'Режисер',
   'catalog.play': 'Дивитися',
   'catalog.playFromStart': 'Дивитися спочатку',
+  'catalog.moreInfo': 'Детальніше',
+
+  'catalog.trailer': 'Трейлер',
+
+  'catalog.trailerFailed': 'Не вдалося відкрити трейлер.',
+
+
+  'catalog.trailerNotFound': 'Трейлер не знайдено.',
+  'catalog.trailerUnavailable': 'Трейлер недоступний',
+
+  'catalog.showMore': 'Показати більше',
+
+  'catalog.showLess': 'Згорнути',
+
+  'genre.action': 'Бойовик',
+
+  'genre.actionAdventure': 'Бойовик і пригоди',
+
+  'genre.adventure': 'Пригоди',
+
+  'genre.animation': 'Анімація',
+
+  'genre.comedy': 'Комедія',
+
+  'genre.crime': 'Кримінал',
+
+  'genre.documentary': 'Документальний',
+
+  'genre.drama': 'Драма',
+
+  'genre.family': 'Сімейний',
+
+  'genre.fantasy': 'Фентезі',
+
+  'genre.history': 'Історія',
+
+  'genre.horror': 'Жахи',
+
+  'genre.kids': 'Дитячий',
+
+  'genre.music': 'Музика',
+
+  'genre.mystery': 'Детектив',
+
+  'genre.news': 'Новини',
+
+  'genre.reality': 'Реаліті-шоу',
+
+  'genre.romance': 'Мелодрама',
+
+  'genre.scifi': 'Фантастика',
+
+  'genre.scifiFantasy': 'Фантастика і фентезі',
+
+  'genre.soap': 'Мильна опера',
+
+  'genre.talk': 'Ток-шоу',
+
+  'genre.thriller': 'Трилер',
+
+  'genre.tvMovie': 'Телефільм',
+
+  'genre.war': 'Військовий',
+
+  'genre.warPolitics': 'Війна і політика',
+
+  'genre.western': 'Вестерн',
   'catalog.addWatchlist': 'Додати до «Переглянути пізніше»',
   'catalog.removeWatchlist': 'Видалити з «Переглянути пізніше»',
   'catalog.watchlistAdded': 'Додано до «Переглянути пізніше»',
@@ -326,6 +393,12 @@ export const UK_MESSAGES = {
   'settings.apiKey': 'Ключ API',
   'settings.assrtToken': 'Токен API',
   'settings.assrtDescription': 'Assrt.net пропонує переважно китайські субтитри. Токен необов’язковий; залиште поле порожнім, щоб використовувати спільний токен.',
+
+  'settings.trailers': 'Трейлери',
+
+  'settings.tmdbApiKey': 'Ключ API TMDB',
+
+  'settings.tmdbApiKeyHint': 'Необов’язково. Покращує пошук трейлерів.',
   'settings.username': 'Ім’я користувача',
   'settings.password': 'Пароль',
   'settings.dataManagement': 'Керування даними',

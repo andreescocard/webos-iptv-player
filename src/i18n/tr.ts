@@ -124,6 +124,73 @@ export const TR_MESSAGES = {
   'catalog.director': 'Yönetmen',
   'catalog.play': 'Oynat',
   'catalog.playFromStart': 'Baştan oynat',
+  'catalog.moreInfo': 'Daha fazla bilgi',
+
+  'catalog.trailer': 'Fragman',
+
+  'catalog.trailerFailed': 'Fragman açılamadı.',
+
+
+  'catalog.trailerNotFound': 'Fragman bulunamadı.',
+  'catalog.trailerUnavailable': 'Fragman kullanılamıyor',
+
+  'catalog.showMore': 'Daha fazla göster',
+
+  'catalog.showLess': 'Daha az göster',
+
+  'genre.action': 'Aksiyon',
+
+  'genre.actionAdventure': 'Aksiyon ve macera',
+
+  'genre.adventure': 'Macera',
+
+  'genre.animation': 'Animasyon',
+
+  'genre.comedy': 'Komedi',
+
+  'genre.crime': 'Suç',
+
+  'genre.documentary': 'Belgesel',
+
+  'genre.drama': 'Dram',
+
+  'genre.family': 'Aile',
+
+  'genre.fantasy': 'Fantastik',
+
+  'genre.history': 'Tarih',
+
+  'genre.horror': 'Korku',
+
+  'genre.kids': 'Çocuk',
+
+  'genre.music': 'Müzik',
+
+  'genre.mystery': 'Gizem',
+
+  'genre.news': 'Haber',
+
+  'genre.reality': 'Reality',
+
+  'genre.romance': 'Romantik',
+
+  'genre.scifi': 'Bilim kurgu',
+
+  'genre.scifiFantasy': 'Bilim kurgu ve fantastik',
+
+  'genre.soap': 'Pembe dizi',
+
+  'genre.talk': 'Talk show',
+
+  'genre.thriller': 'Gerilim',
+
+  'genre.tvMovie': 'TV filmi',
+
+  'genre.war': 'Savaş',
+
+  'genre.warPolitics': 'Savaş ve siyaset',
+
+  'genre.western': 'Vahşi batı',
   'catalog.addWatchlist': 'İzleme Listesine Ekle',
   'catalog.removeWatchlist': 'İzleme Listesinden Kaldır',
   'catalog.watchlistAdded': 'İzleme Listesine eklendi',
@@ -311,6 +378,12 @@ export const TR_MESSAGES = {
   'settings.apiKey': 'API anahtarı',
   'settings.assrtToken': 'API belirteci',
   'settings.assrtDescription': 'Assrt.net ağırlıklı olarak Çince altyazı sunar. Belirteç isteğe bağlıdır; ortak belirteci kullanmak için boş bırakın.',
+
+  'settings.trailers': 'Fragmanlar',
+
+  'settings.tmdbApiKey': 'TMDB API anahtarı',
+
+  'settings.tmdbApiKeyHint': 'İsteğe bağlı. Fragman eşleşmelerini iyileştirir.',
   'settings.username': 'Kullanıcı adı',
   'settings.password': 'Parola',
   'settings.dataManagement': 'Veri Yönetimi',

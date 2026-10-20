@@ -126,11 +126,11 @@ html.q-scroll-end-padding .catalog-category-rail::after { content: none; }
   .theme-swatch-grid > .theme-swatch {
     -webkit-box-sizing: border-box;
     box-sizing: border-box;
-    -webkit-flex: 0 0 calc((100% - 72px) / 5);
-    flex: 0 0 calc((100% - 72px) / 5);
+    -webkit-flex: 0 0 calc((100% - 54px) / 4);
+    flex: 0 0 calc((100% - 54px) / 4);
     margin: 0 18px 18px 0;
   }
-  .theme-swatch-grid > .theme-swatch:nth-child(5n) {
+  .theme-swatch-grid > .theme-swatch:nth-child(4n) {
     margin-right: 0;
   }
 

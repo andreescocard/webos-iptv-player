@@ -351,7 +351,7 @@ test('no flex-gap container separates an element from loose text in the catalog'
   await enterTab(page, 'movies');
   await page.locator('.catalog-tile[data-item-id="10"]').click();
   await expect(page.locator('#view-movies .detail-plot')).toContainText('A plot.');
-  await page.locator('#view-movies .detail-btn').first().click();
+  await page.locator('#view-movies .movies-detail .detail-btn').first().click();
   await expect(page.locator('#view-player')).toBeVisible();
   await expect(page.locator('#player-osd')).toBeVisible();
 

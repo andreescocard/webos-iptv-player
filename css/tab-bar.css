@@ -72,6 +72,42 @@ body.tabbar-docked #view-epg .epg-view {
   outline: none;
 }
 
+/* One em square beside the label; the slight baseline drop centers it on the text. */
+.tab-bar-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.35em;
+  vertical-align: -0.15em;
+}
+
+.tab-bar-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Live tab: a red dot that stays red in every theme. Only opacity and
+   transform animate, so the pulse stays cheap on webOS 4. */
+.tab-bar-live-dot {
+  display: block;
+  width: 0.6em;
+  height: 0.6em;
+  margin: 0.2em auto;
+  border-radius: 50%;
+  background: #e50914;
+  animation: tabBarLiveDotPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tabBarLiveDotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(1.35); }
+}
+
+html[data-animation="essential"] .tab-bar-live-dot {
+  animation: none;
+}
+
 .tab-bar-item.active {
   color: var(--text-primary);
   border-bottom-color: var(--accent);

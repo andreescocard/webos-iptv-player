@@ -96,6 +96,12 @@ function firstNonEmptyString(...values: unknown[]): string {
   return '';
 }
 
+// backdrop_path is a list of image URLs on most panels, a string on some.
+function firstBackdrop(value: unknown): string {
+  if (Array.isArray(value)) return firstNonEmptyString(...value);
+  return firstNonEmptyString(value);
+}
+
 function mapFetchError(err: unknown): XtreamRequestError {
   if (err instanceof XtreamRequestError) return err;
   if (err instanceof FetchTextError) {
@@ -435,6 +441,8 @@ export function createXtreamClient(creds: XtreamCredentials, accountId = '') {
         releaseDate: toStr(i.releasedate ?? i.release_date),
         durationSecs: toNumber(i.duration_secs),
         poster: toStr(i.movie_image ?? i.cover_big),
+        backdrop: firstBackdrop(i.backdrop_path),
+        trailer: toStr(i.youtube_trailer),
         subtitles: parseSubtitles(i.subtitles),
         imdbId: toStr(i.imdb_id ?? i.imdb).replace(/^tt/i, ''),
         tmdbId: toStr(i.tmdb_id ?? i.tmdb),
@@ -530,6 +538,8 @@ export function createXtreamClient(creds: XtreamCredentials, accountId = '') {
           toNumber(Array.isArray(runTime) ? runTime[0] : runTime),
         ),
         poster: firstNonEmptyString(info.cover, info.movie_image, info.cover_big),
+        backdrop: firstBackdrop(info.backdrop_path),
+        trailer: toStr(info.youtube_trailer),
         rating: firstNonEmptyString(info.rating, info.rating_5based),
         imdbId: firstNonEmptyString(info.imdb_id, info.imdb).replace(/^tt/i, ''),
         tmdbId: firstNonEmptyString(info.tmdb_id, info.tmdb),

@@ -336,6 +336,28 @@
   --border: #3e4451;
 }
 
+/* Cinema — near-black surfaces with a bold red focus. */
+[data-theme="cinema"] {
+  --bg-primary: #141414;
+  --catalog-hero-scrim-rgb: 20 20 20;
+  --bg-secondary: #181818;
+  --bg-tertiary: #2f2f2f;
+  --bg-card: #232323;
+  --text-primary: #ffffff;
+  --text-secondary: #b3b3b3;
+  --text-muted: #808080;
+  --accent: #e50914;
+  --accent-dim: #b20710;
+  --accent-rgb: 229 9 20;
+  --accent-glow: rgb(var(--accent-rgb) / 0.35);
+  --danger: #ff6b6b;
+  --danger-rgb: 255 107 107;
+  --success: #46d369;
+  --warning: #f5c518;
+  --warning-rgb: 245 197 24;
+  --border: #333333;
+}
+
 /* Scrollbars follow muted text on dark themes. Light themes use a softer
    midpoint so a persistent native scrollbar does not become a dark divider. */
 [data-theme="midnight"],
@@ -349,7 +371,8 @@
 [data-theme="pastel-mocha"],
 [data-theme="neon-night"],
 [data-theme="burgundy"],
-[data-theme="cobalt-slate"] {
+[data-theme="cobalt-slate"],
+[data-theme="cinema"] {
   --scrollbar-thumb: var(--text-muted);
 }
 
@@ -380,7 +403,8 @@
 [data-theme="pastel-latte"],
 [data-theme="paper-light"],
 [data-theme="burgundy"],
-[data-theme="cobalt-slate"] {
+[data-theme="cobalt-slate"],
+[data-theme="cinema"] {
   --catalog-surface: var(--bg-card);
   --catalog-control: var(--bg-tertiary);
   --catalog-focus: var(--accent);

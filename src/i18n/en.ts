@@ -130,6 +130,73 @@ export const EN_MESSAGES = {
   'catalog.director': 'Director',
   'catalog.play': 'Play',
   'catalog.playFromStart': 'Play from start',
+  'catalog.moreInfo': 'More info',
+
+  'catalog.trailer': 'Trailer',
+
+  'catalog.trailerFailed': 'Couldn’t open the trailer.',
+
+
+  'catalog.trailerNotFound': 'Trailer not found.',
+  'catalog.trailerUnavailable': 'Trailer unavailable',
+
+  'catalog.showMore': 'Show more',
+
+  'catalog.showLess': 'Show less',
+
+  'genre.action': 'Action',
+
+  'genre.actionAdventure': 'Action & Adventure',
+
+  'genre.adventure': 'Adventure',
+
+  'genre.animation': 'Animation',
+
+  'genre.comedy': 'Comedy',
+
+  'genre.crime': 'Crime',
+
+  'genre.documentary': 'Documentary',
+
+  'genre.drama': 'Drama',
+
+  'genre.family': 'Family',
+
+  'genre.fantasy': 'Fantasy',
+
+  'genre.history': 'History',
+
+  'genre.horror': 'Horror',
+
+  'genre.kids': 'Kids',
+
+  'genre.music': 'Music',
+
+  'genre.mystery': 'Mystery',
+
+  'genre.news': 'News',
+
+  'genre.reality': 'Reality',
+
+  'genre.romance': 'Romance',
+
+  'genre.scifi': 'Sci-Fi',
+
+  'genre.scifiFantasy': 'Sci-Fi & Fantasy',
+
+  'genre.soap': 'Soap',
+
+  'genre.talk': 'Talk',
+
+  'genre.thriller': 'Thriller',
+
+  'genre.tvMovie': 'TV Movie',
+
+  'genre.war': 'War',
+
+  'genre.warPolitics': 'War & Politics',
+
+  'genre.western': 'Western',
   'catalog.addWatchlist': 'Add to Watchlist',
   'catalog.removeWatchlist': 'Remove from Watchlist',
   'catalog.watchlistAdded': 'Added to Watchlist',
@@ -318,6 +385,12 @@ export const EN_MESSAGES = {
   'settings.apiKey': 'API key',
   'settings.assrtToken': 'API token',
   'settings.assrtDescription': 'Assrt.net primarily provides Chinese subtitles. The token is optional; leave blank to use the shared token.',
+
+  'settings.trailers': 'Trailers',
+
+  'settings.tmdbApiKey': 'TMDB API key',
+
+  'settings.tmdbApiKeyHint': 'Optional. Improves trailer matches.',
   'settings.username': 'Username',
   'settings.password': 'Password',
   'settings.dataManagement': 'Data Management',

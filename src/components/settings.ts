@@ -37,6 +37,7 @@ import { CONFIG } from '../config';
 import { THEMES, OVERLAY_STYLES, TEXT_SIZES, DEFAULT_TEXT_SIZE, type ThemeMeta, type OverlayStyle, type TextSize } from '../config/themes';
 import { previewTheme, applyTextSize } from '../services/theme-service';
 import { showToast } from './toast';
+import { getTmdbApiKey, setTmdbApiKey } from '../services/trailer-service';
 import { ConfirmationPrompt } from './confirmation-prompt';
 import { sourceToggle, toggleGroup } from './toggle-controls';
 import {
@@ -959,6 +960,18 @@ export class Settings {
                     { value: 'active', label: t('settings.channelCycleActive') },
                   ], channelCycleMode)}
                   <div class="settings-item-hint">${t('settings.channelCycleModeHint')}</div>
+                </div>
+              </div>
+              <div class="settings-section">
+                <h3 class="settings-section-title">${t('settings.trailers')}</h3>
+                <div class="settings-row">
+                  <div class="settings-field wide">
+                    <label><span class="settings-domain">TMDB</span> ${t('settings.tmdbApiKey')}</label>
+                    <input type="password" class="settings-input" data-focusable id="tmdb-key"
+                           aria-label="${t('settings.tmdbApiKey')}" value="${getTmdbApiKey()}"
+                           placeholder="api_key" autocomplete="off">
+                    <div class="settings-item-hint">${t('settings.tmdbApiKeyHint')}</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2890,6 +2903,9 @@ export class Settings {
         Number(xtreamCatalogRefresh.dataset.value),
       );
     }
+
+    const tmdbKey = ($('#tmdb-key', this.container) as HTMLInputElement | null)?.value;
+    if (tmdbKey !== undefined && tmdbKey.trim() !== getTmdbApiKey()) setTmdbApiKey(tmdbKey);
 
     const prevOs = StorageService.getOnlineSubtitleConfig();
     const osVal = (id: string) => ($(`#${id}`, this.container) as HTMLInputElement | null)?.value.trim() ?? '';

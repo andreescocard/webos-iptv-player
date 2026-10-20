@@ -682,7 +682,7 @@ test.describe('Settings navigation', () => {
     }
   });
 
-  test('lays out the 15 theme swatches across three full rows', async ({ page }) => {
+  test('lays out the 16 theme swatches across four full rows', async ({ page }) => {
     await page.goto('/');
     await page.locator('[data-settings-target="appearance"]').click();
 
@@ -695,7 +695,7 @@ test.describe('Settings navigation', () => {
       return Array.from(rows.values());
     });
 
-    expect(rowCounts).toEqual([5, 5, 5]);
+    expect(rowCounts).toEqual([4, 4, 4, 4]);
   });
 
   test('the text size picker scales only fonts and persists', async ({ page }) => {

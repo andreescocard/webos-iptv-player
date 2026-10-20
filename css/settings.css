@@ -1044,7 +1044,7 @@
    its own surfaces/text render in that theme's colors. */
 .theme-swatch-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 18px;
 }
 

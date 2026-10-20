@@ -582,7 +582,6 @@ const XTREAM_SCREENS: Screen[] = [
       await p.keyboard.press('ArrowRight');
       await expect(p.locator('#view-movies .catalog-cat[data-category-id="2"]')).toHaveClass(/focused/);
       await railAtRest(p, '#view-movies .catalog-rails');
-      await railAtRest(p, '#view-movies .catalog-category-rail');
     },
   },
   {
@@ -626,7 +625,7 @@ const XTREAM_SCREENS: Screen[] = [
       await enterTab(p, 'movies');
       await p.locator('#view-movies .catalog-tile[data-item-id="10"]').first().click();
       await expect(p.locator('#view-movies .detail-plot')).toContainText('A plot.');
-      await p.locator('#view-movies .detail-btn').first().click();
+      await p.locator('#view-movies .movies-detail .detail-btn').first().click();
       await expect(p.locator('#player-osd')).toBeVisible();
     },
   },

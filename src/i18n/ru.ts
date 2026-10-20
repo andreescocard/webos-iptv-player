@@ -136,6 +136,73 @@ export const RU_MESSAGES = {
   'catalog.director': 'Режиссёр',
   'catalog.play': 'Смотреть',
   'catalog.playFromStart': 'Смотреть сначала',
+  'catalog.moreInfo': 'Подробнее',
+
+  'catalog.trailer': 'Трейлер',
+
+  'catalog.trailerFailed': 'Не удалось открыть трейлер.',
+
+
+  'catalog.trailerNotFound': 'Трейлер не найден.',
+  'catalog.trailerUnavailable': 'Трейлер недоступен',
+
+  'catalog.showMore': 'Показать больше',
+
+  'catalog.showLess': 'Свернуть',
+
+  'genre.action': 'Боевик',
+
+  'genre.actionAdventure': 'Боевик и приключения',
+
+  'genre.adventure': 'Приключения',
+
+  'genre.animation': 'Мультфильм',
+
+  'genre.comedy': 'Комедия',
+
+  'genre.crime': 'Криминал',
+
+  'genre.documentary': 'Документальный',
+
+  'genre.drama': 'Драма',
+
+  'genre.family': 'Семейный',
+
+  'genre.fantasy': 'Фэнтези',
+
+  'genre.history': 'История',
+
+  'genre.horror': 'Ужасы',
+
+  'genre.kids': 'Детский',
+
+  'genre.music': 'Музыка',
+
+  'genre.mystery': 'Детектив',
+
+  'genre.news': 'Новости',
+
+  'genre.reality': 'Реалити-шоу',
+
+  'genre.romance': 'Мелодрама',
+
+  'genre.scifi': 'Фантастика',
+
+  'genre.scifiFantasy': 'Фантастика и фэнтези',
+
+  'genre.soap': 'Мыльная опера',
+
+  'genre.talk': 'Ток-шоу',
+
+  'genre.thriller': 'Триллер',
+
+  'genre.tvMovie': 'Телефильм',
+
+  'genre.war': 'Военный',
+
+  'genre.warPolitics': 'Война и политика',
+
+  'genre.western': 'Вестерн',
   'catalog.addWatchlist': 'Добавить в «Смотреть позже»',
   'catalog.removeWatchlist': 'Удалить из «Смотреть позже»',
   'catalog.watchlistAdded': 'Добавлено в «Смотреть позже»',
@@ -326,6 +393,12 @@ export const RU_MESSAGES = {
   'settings.apiKey': 'Ключ API',
   'settings.assrtToken': 'Токен API',
   'settings.assrtDescription': 'Assrt.net предлагает в основном китайские субтитры. Токен необязателен; оставьте поле пустым, чтобы использовать общий токен.',
+
+  'settings.trailers': 'Трейлеры',
+
+  'settings.tmdbApiKey': 'Ключ API TMDB',
+
+  'settings.tmdbApiKeyHint': 'Необязательно. Улучшает поиск трейлеров.',
   'settings.username': 'Имя пользователя',
   'settings.password': 'Пароль',
   'settings.dataManagement': 'Управление данными',

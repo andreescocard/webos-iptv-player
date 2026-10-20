@@ -41,7 +41,7 @@ export async function seedXtream(page: Page, opts: { catalog?: 'large' } = {}): 
         : [MOVIE_ONE]);
     }
     if (url.includes('get_vod_info')) {
-      return json({ info: { plot: 'A plot.', duration_secs: 3600,
+      return json({ info: { plot: 'A plot.', duration_secs: 3600, youtube_trailer: 'abcdefghijk',
         subtitles: [{ id: '1', title: 'Sub 1', language: 'l1', url: 'http://host/sub1.srt' }] } });
     }
     if (url.includes('get_series_categories')) return json([{ category_id: '2', category_name: 'Cat B' }]);

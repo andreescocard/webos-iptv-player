@@ -136,6 +136,73 @@ export const PL_MESSAGES = {
   'catalog.director': 'Reżyser',
   'catalog.play': 'Odtwórz',
   'catalog.playFromStart': 'Odtwórz od początku',
+  'catalog.moreInfo': 'Więcej informacji',
+
+  'catalog.trailer': 'Zwiastun',
+
+  'catalog.trailerFailed': 'Nie udało się otworzyć zwiastuna.',
+
+
+  'catalog.trailerNotFound': 'Nie znaleziono zwiastuna.',
+  'catalog.trailerUnavailable': 'Zwiastun niedostępny',
+
+  'catalog.showMore': 'Pokaż więcej',
+
+  'catalog.showLess': 'Pokaż mniej',
+
+  'genre.action': 'Akcja',
+
+  'genre.actionAdventure': 'Akcja i przygoda',
+
+  'genre.adventure': 'Przygodowy',
+
+  'genre.animation': 'Animacja',
+
+  'genre.comedy': 'Komedia',
+
+  'genre.crime': 'Kryminał',
+
+  'genre.documentary': 'Dokumentalny',
+
+  'genre.drama': 'Dramat',
+
+  'genre.family': 'Familijny',
+
+  'genre.fantasy': 'Fantasy',
+
+  'genre.history': 'Historyczny',
+
+  'genre.horror': 'Horror',
+
+  'genre.kids': 'Dla dzieci',
+
+  'genre.music': 'Muzyczny',
+
+  'genre.mystery': 'Tajemnica',
+
+  'genre.news': 'Wiadomości',
+
+  'genre.reality': 'Reality',
+
+  'genre.romance': 'Romans',
+
+  'genre.scifi': 'Science fiction',
+
+  'genre.scifiFantasy': 'Sci-Fi i fantasy',
+
+  'genre.soap': 'Telenowela',
+
+  'genre.talk': 'Talk-show',
+
+  'genre.thriller': 'Thriller',
+
+  'genre.tvMovie': 'Film telewizyjny',
+
+  'genre.war': 'Wojenny',
+
+  'genre.warPolitics': 'Wojna i polityka',
+
+  'genre.western': 'Western',
   'catalog.addWatchlist': 'Dodaj do listy',
   'catalog.removeWatchlist': 'Usuń z listy',
   'catalog.watchlistAdded': 'Dodano do listy',
@@ -326,6 +393,12 @@ export const PL_MESSAGES = {
   'settings.apiKey': 'Klucz API',
   'settings.assrtToken': 'Token API',
   'settings.assrtDescription': 'Assrt.net udostępnia głównie chińskie napisy. Token jest opcjonalny; pozostaw puste pole, aby użyć wspólnego tokenu.',
+
+  'settings.trailers': 'Zwiastuny',
+
+  'settings.tmdbApiKey': 'Klucz API TMDB',
+
+  'settings.tmdbApiKeyHint': 'Opcjonalne. Poprawia wyszukiwanie zwiastunów.',
   'settings.username': 'Nazwa użytkownika',
   'settings.password': 'Hasło',
   'settings.dataManagement': 'Zarządzanie danymi',

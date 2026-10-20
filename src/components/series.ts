@@ -4,15 +4,18 @@ import { morph } from '../utils/morph';
 import { StorageService } from '../services/storage-service';
 import { loadSeriesCategories, loadSeries, loadSeriesInfo } from '../services/xtream-catalog';
 import { xtreamEpisodeUrl, type XtreamCredentials } from '../utils/xtream-url';
-import { CatalogView, type CatalogHandlers } from './catalog-view';
+import { CatalogView, buildFacts, catalogButton, catalogFacts, type CatalogAction, type CatalogHandlers, type HeroMeta, type TrailerTarget } from './catalog-view';
 import { PLAY_ICON, watchlistIcon } from './icons';
 import { showToast } from './toast';
 import { t, tp } from '../i18n';
 import { VirtualList } from '../utils/virtual-list';
+import { lazySrc } from '../utils/lazy-images';
 
 const EPISODE_GAP = 16;
 const EPISODE_NO_PLOT_ESTIMATE = 138;
 const EPISODE_PLOT_ESTIMATE = 216;
+// A row with a 16:9 still is at least the still's height plus the row padding.
+const EPISODE_THUMB_ESTIMATE = 206;
 const EPISODE_OVERSCAN = 5;
 // The whole detail page scrolls, so the fallback is the page viewport, not the
 // space left under the header.
@@ -22,6 +25,10 @@ const EPISODE_VIEWPORT_FALLBACK = 984;
 // rails + an "all categories" drill-in) → per-category poster grid → a detail
 // screen with a season selector over an episode list. The browse/grid/nav
 // machinery lives in CatalogView.
+function seriesMinutes(info: SeriesInfo): string {
+  return info.episodeRunTimeMins > 0 ? t('catalog.minutes', { count: info.episodeRunTimeMins }) : '';
+}
+
 export class Series extends CatalogView<SeriesCategory, SeriesItem> {
   protected get kicker(): string { return t('common.series'); }
   protected readonly resumeKind: ResumeKind = 'episode';
@@ -46,6 +53,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
   private episodeScrollFrame: number | null = null;
   // A held key's reveal writes the list's offset without a smooth scroll.
   private instantEpisodeScroll = false;
+  private heroPlayRequest = 0;
 
   constructor(container: HTMLElement, handlers: CatalogHandlers) {
     super(container, handlers);
@@ -68,6 +76,82 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
   protected itemName(s: SeriesItem): string { return s.name; }
   protected itemPoster(s: SeriesItem): string { return s.poster; }
   protected itemCategoryId(s: SeriesItem): string { return s.categoryId; }
+  protected itemRating(s: SeriesItem): string { return s.rating; }
+
+  protected async loadHeroMeta(
+    account: PlaylistEntry,
+    series: SeriesItem,
+    signal: AbortSignal,
+  ): Promise<HeroMeta | null> {
+    const info = await loadSeriesInfo(account, series.seriesId, signal);
+    if (!info) return null;
+    return {
+      backdrop: info.backdrop || '',
+      plot: info.plot,
+      genre: info.genre,
+      year: info.year ? String(info.year) : '',
+      rating: info.rating,
+      duration: seriesMinutes(info),
+      trailer: info.trailer,
+      tmdbId: info.tmdbId,
+    };
+  }
+
+  protected detailItem(): SeriesItem | null { return this.currentSeries; }
+
+  protected trailerTarget(series: SeriesItem): TrailerTarget | null {
+    const info = this.currentSeries === series ? this.currentInfo : null;
+    const meta = this.heroMeta(series);
+    return {
+      kind: 'tv',
+      title: series.name,
+      year: info?.year ? String(info.year) : meta?.year,
+      panelTrailer: info?.trailer ?? meta?.trailer,
+      genre: info?.genre || meta?.genre || undefined,
+      category: this.categories.find(c => c.id === series.categoryId)?.name,
+      tmdbId: info?.tmdbId || meta?.tmdbId || undefined,
+    };
+  }
+
+  // The most recent episode of this series left part-watched, if any.
+  private resumeFor(series: SeriesItem): ResumeEntry | null {
+    return this.resume.find((r) => r.watchlistOwner?.kind === 'series'
+      && r.watchlistOwner.itemId === series.seriesId) ?? null;
+  }
+
+  protected heroPlayLabel(series: SeriesItem): string {
+    return t(this.resumeFor(series) ? 'common.resume' : 'catalog.play');
+  }
+
+  // Resumes the series where it was left, else plays its first episode; a
+  // series without episodes opens its detail screen instead.
+  protected playFromHero(series: SeriesItem): void {
+    const resume = this.resumeFor(series);
+    if (resume) {
+      this.playResume(resume.itemId);
+      return;
+    }
+    const account = this.account;
+    const signal = this.requestSignal;
+    if (!account || !signal) return;
+    const request = ++this.heroPlayRequest;
+    void loadSeriesInfo(account, series.seriesId, signal)
+      .catch((): SeriesInfo | null => null)
+      .then((info) => {
+        if (signal.aborted || request !== this.heroPlayRequest || this.account?.id !== account.id) return;
+        const first = info?.seasons.length ? (info.episodesBySeason[info.seasons[0]] ?? [])[0] : undefined;
+        if (!info || !first) {
+          void this.openDetail(series);
+          return;
+        }
+        const saved = StorageService.getResume(account.id, 'episode', first.id);
+        this.handlers.onPlayVod({
+          ...this.episodePlayback(series, first),
+          resumeSecs: saved ? saved.position : 0,
+          episodeQueue: this.episodesAfter(info, first.id, series),
+        });
+      });
+  }
   protected clearDetail(): void {
     this.detailController?.abort();
     this.detailController = null;
@@ -207,8 +291,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     };
   }
 
-  private episodesAfter(episodeId: string, series: SeriesItem): VodQueueItem[] {
-    const info = this.currentInfo;
+  private episodesAfter(info: SeriesInfo | null, episodeId: string, series: SeriesItem): VodQueueItem[] {
     if (!info) return [];
     const episodes = info.seasons.reduce<Episode[]>(
       (all, season) => all.concat(info.episodesBySeason[season] ?? []), []);
@@ -225,7 +308,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     this.handlers.onPlayVod({
       ...this.episodePlayback(series, ep),
       resumeSecs: saved ? saved.position : 0,
-      episodeQueue: this.episodesAfter(ep.id, series),
+      episodeQueue: this.episodesAfter(this.currentInfo, ep.id, series),
     });
   }
 
@@ -267,12 +350,28 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     `;
   }
 
+  // A 16:9 still with the play badge over it, and how far it was watched.
+  // A still that fails to load leaves the neutral frame and the badge.
+  private episodeThumb(ep: Episode, saved: ResumeEntry | null): Safe {
+    const duration = saved ? saved.duration || ep.durationSecs : 0;
+    const progress = saved && duration > 0 ? Math.min(100, Math.round((saved.position / duration) * 100)) : 0;
+    return html`
+      <div class="episode-thumb">
+        <img class="episode-thumb-img" ${lazySrc(ep.poster)} alt="" onerror="this.style.display='none'">
+        <span class="episode-thumb-play">${raw(PLAY_ICON)}</span>
+        ${progress > 0 ? html`
+          <div class="episode-progress"><div class="episode-progress-fill" style="width:${progress}%"></div></div>` : ''}
+      </div>
+    `;
+  }
+
   private episodeRow(accountId: string, ep: Episode): Safe {
     const saved = StorageService.getResume(accountId, 'episode', ep.id);
     const mins = ep.durationSecs > 0 ? t('catalog.minutes', { count: Math.floor(ep.durationSecs / 60) }) : '';
     return html`
-      <div class="episode-row" data-focusable data-key="ep:${ep.id}" data-episode-id="${ep.id}">
-        <span class="episode-badge">${raw(PLAY_ICON)}</span>
+      <div class="episode-row ${ep.poster ? 'episode-row-thumb' : ''}" data-focusable data-key="ep:${ep.id}"
+           data-episode-id="${ep.id}">
+        ${ep.poster ? this.episodeThumb(ep, saved) : html`<span class="episode-badge">${raw(PLAY_ICON)}</span>`}
         <div class="episode-body">
           <div class="episode-title">
             <span class="episode-num">E${ep.episode}</span>
@@ -294,19 +393,26 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     const episodes = info ? (info.episodesBySeason[this.selectedSeason] ?? []) : [];
     const poster = info?.poster || series.poster;
     const year = info?.year ? String(info.year) : '';
-    const mins = info && info.episodeRunTimeMins > 0
-      ? t('catalog.minutes', { count: info.episodeRunTimeMins })
-      : '';
-    const meta = [year, mins, info?.genre, info?.rating || series.rating]
-      .filter((value) => !!value);
+    const facts = buildFacts({
+      rating: info?.rating || series.rating,
+      year,
+      duration: info ? seriesMinutes(info) : '',
+      genre: info?.genre,
+    });
     if (episodes !== this.episodeSource) {
       this.episodeSource = episodes;
       this.measuredEpisodes.clear();
-      this.episodeVirtualizer.setItemSizes(episodes.map(ep =>
-        ep.plot ? EPISODE_PLOT_ESTIMATE : EPISODE_NO_PLOT_ESTIMATE));
+      this.episodeVirtualizer.setItemSizes(episodes.map(ep => Math.max(
+        ep.plot ? EPISODE_PLOT_ESTIMATE : EPISODE_NO_PLOT_ESTIMATE,
+        ep.poster ? EPISODE_THUMB_ESTIMATE : 0)));
     }
     const focusedKey = this.focusedKey();
     const watchlisted = StorageService.isWatchlisted(a.id, 'series', series.seriesId);
+    const actions: CatalogAction[] = [{
+      id: 'watchlist',
+      label: t(watchlisted ? 'catalog.removeWatchlist' : 'catalog.addWatchlist'),
+      icon: watchlistIcon(watchlisted),
+    }];
     const previousScroller = this.layer('detail').querySelector<HTMLElement>('.series-detail');
     const previousEpisodes = this.layer('detail').querySelector<HTMLElement>('.series-episodes');
     this.episodeVirtualizer.setLeadingSize(
@@ -325,20 +431,17 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     const episodeRange = this.episodeVirtualizer.getRange(episodes.length, episodeViewport);
 
     morph(this.layer('detail'), html`
-      <div class="catalog-view series-detail" data-nav-container>
+      <div class="catalog-view series-detail" data-nav-container data-lazy-root>
         <div class="series-detail-head">
           <div class="detail-poster-wrap series-detail-poster">${this.posterCell(series.name, poster)}</div>
           <div class="detail-body">
             <h1 class="detail-title">${series.name}</h1>
-            ${meta.length ? html`<div class="detail-meta">${meta.join('  ·  ')}</div>` : ''}
-            ${info?.plot ? html`<p class="detail-plot">${info.plot}</p>` : ''}
+            ${facts.length ? html`<div class="detail-meta">${catalogFacts(facts)}</div>` : ''}
+            ${this.detailPlot(info?.plot ?? '')}
             ${info?.cast ? html`<div class="detail-cast"><span class="detail-label">${t('catalog.cast')}</span> ${info.cast}</div>` : ''}
             ${info?.director ? html`<div class="detail-cast"><span class="detail-label">${t('catalog.director')}</span> ${info.director}</div>` : ''}
             <div class="detail-actions">
-              <button class="detail-btn" data-focusable data-key="watchlist" data-action="watchlist">
-                <span class="detail-btn-icon">${raw(watchlistIcon(watchlisted))}</span>
-                <span>${t(watchlisted ? 'catalog.removeWatchlist' : 'catalog.addWatchlist')}</span>
-              </button>
+              ${actions.concat(this.extraDetailActions()).map((action) => catalogButton(action, 'detail'))}
             </div>
             ${this.detailLoading
               ? html`<p class="catalog-hint">${t('common.loading')}</p>`
@@ -380,6 +483,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
         ` : ''}
       </div>
     `);
+    if (this.measureDetailPlot()) return;
     const measuredSizes = Array.from(
       this.layer('detail').querySelectorAll<HTMLElement>('.series-episode-cell'),
     ).map(cell => ({

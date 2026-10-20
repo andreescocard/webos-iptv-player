@@ -20,7 +20,7 @@
 html.q-scroll-end-padding .playlist-tabs::after { content: ''; flex: 0 0 1px; width: 1px; height: 1px; margin-left: 3px; margin-right: -8px; }
 html.q-scroll-end-padding .player-sidebar .sidebar-tabs::after { content: ''; flex: 0 0 1px; width: 1px; height: 1px; margin-left: 3px; margin-right: -8px; }
 html.q-scroll-end-padding .epg-date-list::after { content: ''; flex: 0 0 1px; width: 1px; height: 1px; margin-left: 7px; margin-right: -16px; }
-html.q-scroll-end-padding .catalog-rail-track::after { content: ''; flex: 0 0 1px; width: 1px; height: 1px; margin-left: -9px; margin-right: -12px; }
+html.q-scroll-end-padding .catalog-rail-track::after { content: ''; flex: 0 0 1px; width: 1px; height: 1px; margin-left: 3px; margin-right: -24px; }
 html.q-scroll-end-padding .playlist-tabs.epg-playlist-tabs::after { content: ''; flex: 0 0 1px; width: 1px; height: 1px; margin-left: 9px; margin-right: -12px; }
 html.q-scroll-end-padding .playlist-tabs.parental-tabs::after { content: none; }
 html.q-no-flex-gap .live-badge > * + * { margin-left: 6px; }
@@ -125,6 +125,7 @@ html.q-no-flex-gap .search-list > * + * { margin-top: 8px; }
 html.q-no-flex-gap .search-channel-row > * + * { margin-left: 24px; }
 html.q-no-flex-gap .search-program-list > * + * { margin-top: 8px; }
 html.q-no-flex-gap .search-program-row > * + * { margin-left: 24px; }
+html.q-no-flex-gap .catalog-hero-actions > * + * { margin-left: 16px; }
 html.q-no-flex-gap .catalog-rail-track > * + * { margin-left: 20px; }
 html.q-no-flex-gap .movies-detail > * + * { margin-left: 56px; }
 html.q-no-flex-gap .detail-actions > * + * { margin-left: 12px; }
@@ -143,5 +144,5 @@ html.q-no-flex-gap .live-category-row > * + * { margin-left: 12px; }
 html.q-no-flex-gap .playlist-tabs::after { margin-left: 7px; }
 html.q-no-flex-gap .player-sidebar .sidebar-tabs::after { margin-left: 7px; }
 html.q-no-flex-gap .epg-date-list::after { margin-left: 15px; }
-html.q-no-flex-gap .catalog-rail-track::after { margin-left: 11px; }
+html.q-no-flex-gap .catalog-rail-track::after { margin-left: 23px; }
 html.q-no-flex-gap .playlist-tabs.epg-playlist-tabs::after { margin-left: 11px; }

@@ -527,6 +527,10 @@ export interface VodInfo {
   releaseDate: string;
   durationSecs: number;
   poster: string;
+  // Landscape artwork; missing from details cached before it was parsed.
+  backdrop?: string;
+  // Raw panel youtube_trailer (id or URL); absent in details cached before it was parsed.
+  trailer?: string;
   subtitles: SidecarSubtitle[];
   imdbId: string;
   tmdbId: string;
@@ -567,6 +571,8 @@ export interface SeriesInfo {
   releaseDate: string;
   episodeRunTimeMins: number;
   poster: string;
+  backdrop?: string;
+  trailer?: string;
   rating: string;
   imdbId: string;
   tmdbId: string;

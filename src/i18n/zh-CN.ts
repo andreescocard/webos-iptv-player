@@ -124,6 +124,73 @@ export const ZH_CN_MESSAGES = {
   'catalog.director': '导演',
   'catalog.play': '播放',
   'catalog.playFromStart': '从头播放',
+  'catalog.moreInfo': '更多信息',
+
+  'catalog.trailer': '预告片',
+
+  'catalog.trailerFailed': '无法打开预告片。',
+
+
+  'catalog.trailerNotFound': '未找到预告片。',
+  'catalog.trailerUnavailable': '预告片不可用',
+
+  'catalog.showMore': '展开',
+
+  'catalog.showLess': '收起',
+
+  'genre.action': '动作',
+
+  'genre.actionAdventure': '动作冒险',
+
+  'genre.adventure': '冒险',
+
+  'genre.animation': '动画',
+
+  'genre.comedy': '喜剧',
+
+  'genre.crime': '犯罪',
+
+  'genre.documentary': '纪录片',
+
+  'genre.drama': '剧情',
+
+  'genre.family': '家庭',
+
+  'genre.fantasy': '奇幻',
+
+  'genre.history': '历史',
+
+  'genre.horror': '恐怖',
+
+  'genre.kids': '儿童',
+
+  'genre.music': '音乐',
+
+  'genre.mystery': '悬疑',
+
+  'genre.news': '新闻',
+
+  'genre.reality': '真人秀',
+
+  'genre.romance': '爱情',
+
+  'genre.scifi': '科幻',
+
+  'genre.scifiFantasy': '科幻与奇幻',
+
+  'genre.soap': '肥皂剧',
+
+  'genre.talk': '脱口秀',
+
+  'genre.thriller': '惊悚',
+
+  'genre.tvMovie': '电视电影',
+
+  'genre.war': '战争',
+
+  'genre.warPolitics': '战争与政治',
+
+  'genre.western': '西部',
   'catalog.addWatchlist': '加入稍后观看',
   'catalog.removeWatchlist': '从稍后观看中移除',
   'catalog.watchlistAdded': '已加入稍后观看',
@@ -311,6 +378,12 @@ export const ZH_CN_MESSAGES = {
   'settings.apiKey': 'API 密钥',
   'settings.assrtToken': 'API 令牌',
   'settings.assrtDescription': 'Assrt.net 主要提供中文字幕，令牌可选，留空时使用共享令牌。',
+
+  'settings.trailers': '预告片',
+
+  'settings.tmdbApiKey': 'TMDB API 密钥',
+
+  'settings.tmdbApiKeyHint': '可选。可提高预告片匹配率。',
   'settings.username': '用户名',
   'settings.password': '密码',
   'settings.dataManagement': '数据管理',

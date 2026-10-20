@@ -329,7 +329,7 @@ test('a movie result opened by POINTER can then be played by pointer (tab-bar fo
   // the tab-bar search box stays expanded (the pointer path). Before the fix this
   // left the tab bar's `_focused` flag stale-true.
   await page.locator('#view-search .catalog-tile[data-stream-id="10"]').click();
-  await expect(page.locator('#view-movies .detail-btn-primary')).toBeVisible();
+  await expect(page.locator('#view-movies .movies-detail .detail-btn-primary')).toBeVisible();
 
   // Play by a POINTER click on the detail button. Regression guard: a stale
   // tab-bar focus swallowed this select before the fix (the detail Play routed
@@ -337,7 +337,7 @@ test('a movie result opened by POINTER can then be played by pointer (tab-bar fo
   // stream is actually requested — proof the select reached play() — rather than
   // the player view staying up (the stubbed empty video errors back to Movies).
   const streamRequested = page.waitForRequest('**/movie/**', { timeout: 5000 });
-  await page.locator('#view-movies .detail-btn-primary').click();
+  await page.locator('#view-movies .movies-detail .detail-btn-primary').click();
   await streamRequested;
 });
 
@@ -593,7 +593,7 @@ test('a poster clicked to dismiss the account menu over an empty search box stil
   await poster.click();
   await expect(page.locator('.account-menu')).toHaveCount(0);
   // The click's select reaches the poster instead of the refocused search box.
-  await expect(page.locator('#view-movies .detail-btn-primary')).toBeVisible();
+  await expect(page.locator('#view-movies .movies-detail .detail-btn-primary')).toBeVisible();
   await expect(page.locator('.search-history-panel')).toBeHidden();
   await expect(page.locator('.tab-bar-item.focused, .account-avatar.focused')).toHaveCount(0);
 });

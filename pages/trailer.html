@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trailer</title>
+<style>
+html, body { margin: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+iframe { position: fixed; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+</style>
+</head>
+<body>
+<script>
+(function () {
+  var EMBED_ORIGIN = 'https://www.youtube-nocookie.com';
+  var match = /[?&]v=([^&#]*)/.exec(location.search);
+  var id = match ? decodeURIComponent(match[1]) : '';
+  if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return;
+
+  var inner = document.createElement('iframe');
+  inner.setAttribute('allow', 'autoplay; encrypted-media');
+  inner.setAttribute('allowfullscreen', '');
+  inner.src = EMBED_ORIGIN + '/embed/' + id
+    + '?autoplay=1&controls=0&enablejsapi=1&rel=0&playsinline=1&origin=' + encodeURIComponent(location.origin);
+  document.body.appendChild(inner);
+
+  window.addEventListener('message', function (e) {
+    if (e.source === parent) {
+      if (inner.contentWindow) inner.contentWindow.postMessage(e.data, EMBED_ORIGIN);
+    } else if (e.source === inner.contentWindow) {
+      parent.postMessage(e.data, '*');
+    }
+  });
+})();
+</script>
+</body>
+</html>

@@ -128,6 +128,73 @@ export const ES_MESSAGES = {
   'catalog.director': 'Dirección',
   'catalog.play': 'Reproducir',
   'catalog.playFromStart': 'Reproducir desde el inicio',
+  'catalog.moreInfo': 'Más información',
+
+  'catalog.trailer': 'Tráiler',
+
+  'catalog.trailerFailed': 'No se pudo abrir el tráiler.',
+
+
+  'catalog.trailerNotFound': 'Tráiler no encontrado.',
+  'catalog.trailerUnavailable': 'Tráiler no disponible',
+
+  'catalog.showMore': 'Ver más',
+
+  'catalog.showLess': 'Ver menos',
+
+  'genre.action': 'Acción',
+
+  'genre.actionAdventure': 'Acción y aventura',
+
+  'genre.adventure': 'Aventura',
+
+  'genre.animation': 'Animación',
+
+  'genre.comedy': 'Comedia',
+
+  'genre.crime': 'Crimen',
+
+  'genre.documentary': 'Documental',
+
+  'genre.drama': 'Drama',
+
+  'genre.family': 'Familia',
+
+  'genre.fantasy': 'Fantasía',
+
+  'genre.history': 'Historia',
+
+  'genre.horror': 'Terror',
+
+  'genre.kids': 'Infantil',
+
+  'genre.music': 'Música',
+
+  'genre.mystery': 'Misterio',
+
+  'genre.news': 'Noticias',
+
+  'genre.reality': 'Reality',
+
+  'genre.romance': 'Romance',
+
+  'genre.scifi': 'Ciencia ficción',
+
+  'genre.scifiFantasy': 'Ciencia ficción y fantasía',
+
+  'genre.soap': 'Telenovela',
+
+  'genre.talk': 'Entrevistas',
+
+  'genre.thriller': 'Suspense',
+
+  'genre.tvMovie': 'Película para TV',
+
+  'genre.war': 'Bélica',
+
+  'genre.warPolitics': 'Bélica y política',
+
+  'genre.western': 'Western',
   'catalog.addWatchlist': 'Agregar a Mi lista',
   'catalog.removeWatchlist': 'Eliminar de Mi lista',
   'catalog.watchlistAdded': 'Agregado a Mi lista',
@@ -316,6 +383,12 @@ export const ES_MESSAGES = {
   'settings.apiKey': 'Clave de API',
   'settings.assrtToken': 'Token de API',
   'settings.assrtDescription': 'Assrt.net ofrece principalmente subtítulos en chino. El token es opcional; déjalo en blanco para usar el token compartido.',
+
+  'settings.trailers': 'Tráileres',
+
+  'settings.tmdbApiKey': 'Clave de API de TMDB',
+
+  'settings.tmdbApiKeyHint': 'Opcional. Mejora la búsqueda de tráileres.',
   'settings.username': 'Usuario',
   'settings.password': 'Contraseña',
   'settings.dataManagement': 'Gestión de datos',

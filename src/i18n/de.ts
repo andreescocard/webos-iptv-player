@@ -128,6 +128,73 @@ export const DE_MESSAGES = {
   'catalog.director': 'Regie',
   'catalog.play': 'Abspielen',
   'catalog.playFromStart': 'Von Anfang an abspielen',
+  'catalog.moreInfo': 'Weitere Infos',
+
+  'catalog.trailer': 'Trailer',
+
+  'catalog.trailerFailed': 'Trailer konnte nicht geöffnet werden.',
+
+
+  'catalog.trailerNotFound': 'Trailer nicht gefunden.',
+  'catalog.trailerUnavailable': 'Trailer nicht verfügbar',
+
+  'catalog.showMore': 'Mehr anzeigen',
+
+  'catalog.showLess': 'Weniger anzeigen',
+
+  'genre.action': 'Action',
+
+  'genre.actionAdventure': 'Action & Abenteuer',
+
+  'genre.adventure': 'Abenteuer',
+
+  'genre.animation': 'Animation',
+
+  'genre.comedy': 'Komödie',
+
+  'genre.crime': 'Krimi',
+
+  'genre.documentary': 'Dokumentarfilm',
+
+  'genre.drama': 'Drama',
+
+  'genre.family': 'Familie',
+
+  'genre.fantasy': 'Fantasy',
+
+  'genre.history': 'Historie',
+
+  'genre.horror': 'Horror',
+
+  'genre.kids': 'Kinder',
+
+  'genre.music': 'Musik',
+
+  'genre.mystery': 'Mystery',
+
+  'genre.news': 'Nachrichten',
+
+  'genre.reality': 'Reality',
+
+  'genre.romance': 'Romantik',
+
+  'genre.scifi': 'Science-Fiction',
+
+  'genre.scifiFantasy': 'Science-Fiction & Fantasy',
+
+  'genre.soap': 'Seifenoper',
+
+  'genre.talk': 'Talkshow',
+
+  'genre.thriller': 'Thriller',
+
+  'genre.tvMovie': 'TV-Film',
+
+  'genre.war': 'Krieg',
+
+  'genre.warPolitics': 'Krieg & Politik',
+
+  'genre.western': 'Western',
   'catalog.addWatchlist': 'Zur Merkliste hinzufügen',
   'catalog.removeWatchlist': 'Von der Merkliste entfernen',
   'catalog.watchlistAdded': 'Zur Merkliste hinzugefügt',
@@ -316,6 +383,12 @@ export const DE_MESSAGES = {
   'settings.apiKey': 'API-Schlüssel',
   'settings.assrtToken': 'API-Token',
   'settings.assrtDescription': 'Assrt.net bietet hauptsächlich chinesische Untertitel. Der Token ist optional; leer lassen, um den gemeinsamen Token zu verwenden.',
+
+  'settings.trailers': 'Trailer',
+
+  'settings.tmdbApiKey': 'TMDB-API-Schlüssel',
+
+  'settings.tmdbApiKeyHint': 'Optional. Verbessert die Trailersuche.',
   'settings.username': 'Benutzername',
   'settings.password': 'Passwort',
   'settings.dataManagement': 'Datenverwaltung',

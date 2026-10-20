@@ -30,36 +30,67 @@
 
 .catalog-browse { position: relative; padding: 0; overflow: hidden; }
 
+/* The browse hero: artwork behind the top of the view, and its text block in
+   the rails' scroller, so the rails overlap the artwork's lower edge. */
 .catalog-hero {
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-size: cover;
-  background-position: center 28%;
+  top: 0; left: 0; right: 0;
+  height: 820px;
+  overflow: hidden;
   background-color: var(--bg-primary);
+}
+.catalog-hero-art { position: absolute; animation: catalog-hero-in 240ms ease-out; }
+.catalog-hero-backdrop {
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+}
+/* Without landscape art, the portrait poster stands whole on the right. */
+.catalog-hero-poster {
+  top: 40px; right: 160px;
+  width: 340px; height: 510px;
+  border-radius: 16px;
+  object-fit: cover;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+.catalog-hero-glow {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(ellipse 900px 600px at 78% 36%, rgb(var(--accent-rgb) / 0.16), transparent);
 }
 .catalog-hero-scrim {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
   background:
-    linear-gradient(90deg, rgb(var(--catalog-hero-scrim-rgb) / 0.95) 2%, rgb(var(--catalog-hero-scrim-rgb) / 0.5) 40%, transparent 72%),
-    linear-gradient(0deg, var(--bg-primary) 6%, transparent 52%);
+    linear-gradient(90deg, rgb(var(--catalog-hero-scrim-rgb) / 0.96) 0, rgb(var(--catalog-hero-scrim-rgb) / 0.88) 26%, rgb(var(--catalog-hero-scrim-rgb) / 0.4) 52%, transparent 74%),
+    linear-gradient(0deg, var(--bg-primary) 0, transparent 42%);
 }
-.catalog-hero-body {
+@keyframes catalog-hero-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+html[data-animation="essential"] .catalog-hero-art { animation: none; }
+
+.catalog-hero-body { position: relative; }
+.catalog-hero-text {
   position: absolute;
-  left: 80px; top: 120px;
-  max-width: 960px;
-  z-index: 1;
-}
-.catalog-hero-kicker {
-  font-size: 22px; letter-spacing: 4px; font-weight: 700;
-  color: var(--accent); text-transform: uppercase;
-}
-.catalog-fill {
-  margin-top: 16px; font-size: 24px; color: var(--text-secondary);
+  left: 80px; bottom: 32px;
+  width: 860px;
 }
 .catalog-hero-title {
-  margin: 12px 0 0; font-size: 64px; font-weight: 800;
-  color: var(--text-primary); line-height: 1.05;
+  margin: 0; font-size: 56px; font-weight: 700; line-height: 1.1;
+  color: var(--text-primary);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.catalog-hero-meta { margin-top: 12px; font-size: 24px; color: var(--text-secondary); }
+.catalog-hero-plot {
+  margin: 16px 0 0; font-size: 24px; line-height: 1.45; color: var(--text-primary);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+.catalog-hero-actions { display: flex; gap: 16px; margin-top: 24px; }
+.catalog-fill {
+  margin-top: 16px; font-size: 22px; color: var(--text-secondary);
 }
 
 .catalog-rails {
@@ -71,27 +102,24 @@
 .catalog-rails-spacer { height: 58%; }
 .catalog-rails-body {
   min-height: 42%;
-  padding: 8px 80px 60px;
+  padding: 0 80px 60px;
   background: linear-gradient(180deg, transparent 0, rgb(var(--catalog-hero-scrim-rgb) / 0.85) 90px, var(--bg-primary) 240px);
 }
 
-.catalog-rail { margin-bottom: 28px; }
-.catalog-rail-title { margin: 0 0 12px; font-size: 30px; font-weight: 600; color: var(--text-primary); }
-.catalog-rail-track { display: flex; gap: 20px; overflow-x: auto; padding: 12px 12px 20px; margin: 0 -12px; }
-.catalog-category-rail { height: 152px; display: block; overflow-anchor: none; }
-.catalog-category-rail-spacer { position: relative; height: 120px; }
-.catalog-category-rail-cell {
-  position: absolute;
-  top: 0;
-  width: 300px;
-  height: 120px;
-}
+.catalog-rail { margin-bottom: 16px; }
+.catalog-rail-title { margin: 0; font-size: 30px; font-weight: 600; color: var(--text-primary); }
+/* The padding holds a focused tile's scale and ring inside the scroller. */
+.catalog-rail-track { display: flex; gap: 20px; overflow-x: auto; padding: 24px; margin: 0 -24px; }
+.catalog-rail-track::-webkit-scrollbar { display: none; }
+/* A wrapping grid; margins, not flex gap, so Chromium 68 and older lay it out. */
+.catalog-category-grid { display: flex; flex-wrap: wrap; padding: 24px 24px 4px; margin: 0 -24px; }
+.catalog-category-grid > .catalog-cat { margin: 0 20px 20px 0; }
 
 .catalog-grid-title { margin: 0 0 24px; font-size: 44px; font-weight: 700; color: var(--text-primary); }
 .catalog-grid-track { position: relative; width: 100%; }
 .catalog-grid-cell { position: absolute; width: 220px; height: 371px; }
 
-.catalog-tile { width: 220px; flex: 0 0 auto; cursor: pointer; }
+.catalog-tile { width: 220px; flex: 0 0 auto; cursor: pointer; transition: transform 150ms ease-out; }
 .catalog-poster-wrap {
   width: 220px; height: 330px;
   border-radius: 12px; overflow: hidden;
@@ -103,11 +131,13 @@
   margin-top: 10px; font-size: 22px; color: var(--text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.catalog-tile.focused,
-.catalog-cat.focused {
+.catalog-tile.focused {
   box-shadow: none;
   border-color: transparent !important;
 }
+.catalog-tile.focused { position: relative; z-index: 1; transform: scale(1.06); }
+.catalog-tile.focused .catalog-tile-name { font-weight: 600; }
+html[data-animation="essential"] .catalog-tile { transition: none; }
 .catalog-tile.focused .catalog-poster-wrap {
   outline: 3px solid var(--catalog-focus);
   outline-offset: 2px;
@@ -122,17 +152,22 @@
 .catalog-see-all-label { margin-top: 16px; font-size: 26px; }
 .catalog-see-all-count { margin-top: 4px; font-size: 20px; color: var(--text-secondary); }
 
+/* A category button: a visible resting card, a faint hover, a bright focus. */
 .catalog-cat {
   width: 300px; height: 120px; flex: 0 0 auto;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 12px; background: var(--catalog-surface); border: 3px solid transparent;
+  border-radius: 12px; background: var(--catalog-control); border: 3px solid var(--border);
   font-size: 26px; color: var(--text-primary); text-align: center; padding: 0 16px;
-  box-sizing: border-box;
+  box-sizing: border-box; cursor: pointer;
 }
+.catalog-cat[data-ring-hover]:not(.focused) { background: var(--catalog-surface); border-color: var(--text-secondary); }
 .catalog-cat.focused {
+  background: var(--catalog-control);
+  border-color: var(--catalog-focus) !important;
   outline: 3px solid var(--catalog-focus);
   outline-offset: 2px;
   box-shadow: 0 0 0 6px rgb(var(--catalog-focus-rgb) / 0.25);
+  font-weight: 600;
 }
 
 .movies-detail { display: flex; gap: 56px; }
@@ -190,6 +225,26 @@
   border: 3px solid transparent; cursor: pointer;
 }
 .episode-row.focused { border-color: var(--accent, #3ea6ff); }
+.episode-thumb {
+  position: relative; flex: 0 0 auto;
+  width: 256px; height: 144px;
+  border-radius: 8px; overflow: hidden;
+  background: var(--catalog-control);
+}
+.episode-thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Fixed white over artwork, on a dark disc so it reads on any still. */
+.episode-thumb-play {
+  position: absolute; top: 50%; left: 50%;
+  width: 48px; height: 48px; margin: -24px 0 0 -24px;
+  box-sizing: border-box; padding: 10px;
+  border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff;
+}
+.episode-thumb-play svg { display: block; width: 100%; height: 100%; }
+.episode-progress {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 6px; background: rgba(255, 255, 255, 0.3);
+}
+.episode-progress-fill { height: 100%; background: var(--accent, #3ea6ff); }
 .episode-badge { display: inline-flex; width: 32px; height: 32px; flex: 0 0 auto; color: var(--text-secondary); margin-top: 4px; }
 .episode-badge svg { width: 100%; height: 100%; }
 .episode-body { flex: 1 1 auto; min-width: 0; }
@@ -205,3 +260,45 @@
   font-size: 24px; line-height: 1.4; color: var(--text-secondary);
   margin: 10px 0 0; max-height: 68px; overflow: hidden;
 }
+
+/* Meta line: icon + text facts. Margins, not flex gap, for Chromium 68 and older. */
+.catalog-fact { display: inline-flex; align-items: center; margin-right: 28px; vertical-align: middle; }
+.catalog-fact:last-child { margin-right: 0; }
+.catalog-fact-icon { display: inline-flex; width: 1em; height: 1em; margin-right: 8px; flex: 0 0 auto; }
+.catalog-fact-icon svg { width: 100%; height: 100%; }
+
+/* Three lines, with a max-height fallback where line clamping is unavailable. */
+.detail-plot-clamped {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden; max-height: 126px;
+}
+.detail-link {
+  display: inline-block; margin: -12px 0 24px -14px; padding: 6px 14px;
+  border: 3px solid transparent; border-radius: 8px; background: none;
+  color: var(--text-secondary); font-size: 22px; font-weight: 600; cursor: pointer;
+}
+.detail-link.focused { border-color: var(--text-primary); color: var(--text-primary); }
+.detail-btn-busy { opacity: 0.6; }
+
+/* Inline trailer: full-screen embed; the app keeps the keys, the frame ignores the pointer. */
+.trailer-overlay { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 10000; background: #000; }
+.trailer-overlay.hidden { display: none; }
+.trailer-frame { width: 100%; height: 100%; border: 0; pointer-events: none; }
+.trailer-pause-badge {
+  position: absolute; top: 50%; left: 50%; width: 120px; height: 120px; margin: -60px 0 0 -60px;
+  border-radius: 60px; background: rgba(0, 0, 0, 0.55); opacity: 0;
+}
+.trailer-pause-badge::before, .trailer-pause-badge::after {
+  content: ''; position: absolute; top: 36px; width: 14px; height: 48px; background: #fff; border-radius: 3px;
+}
+.trailer-pause-badge::before { left: 38px; }
+.trailer-pause-badge::after { left: 68px; }
+.trailer-paused .trailer-pause-badge { opacity: 1; }
+.trailer-osd {
+  position: absolute; right: 48px; bottom: 48px; left: 48px; padding: 16px 20px;
+  border-radius: 8px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 24px;
+  opacity: 0; transform: translateY(16px); transition: opacity 0.2s, transform 0.2s;
+}
+.trailer-osd.shown { opacity: 1; transform: none; }
+.trailer-osd-bar { height: 4px; margin-top: 12px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); overflow: hidden; }
+.trailer-osd-fill { height: 100%; background: #fff; }

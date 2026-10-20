@@ -128,6 +128,73 @@ export const FR_MESSAGES = {
   'catalog.director': 'Réalisation',
   'catalog.play': 'Lire',
   'catalog.playFromStart': 'Lire depuis le début',
+  'catalog.moreInfo': 'Plus d’infos',
+
+  'catalog.trailer': 'Bande-annonce',
+
+  'catalog.trailerFailed': 'Impossible d’ouvrir la bande-annonce.',
+
+
+  'catalog.trailerNotFound': 'Bande-annonce introuvable.',
+  'catalog.trailerUnavailable': 'Bande-annonce indisponible',
+
+  'catalog.showMore': 'Voir plus',
+
+  'catalog.showLess': 'Voir moins',
+
+  'genre.action': 'Action',
+
+  'genre.actionAdventure': 'Action et aventure',
+
+  'genre.adventure': 'Aventure',
+
+  'genre.animation': 'Animation',
+
+  'genre.comedy': 'Comédie',
+
+  'genre.crime': 'Crime',
+
+  'genre.documentary': 'Documentaire',
+
+  'genre.drama': 'Drame',
+
+  'genre.family': 'Famille',
+
+  'genre.fantasy': 'Fantastique',
+
+  'genre.history': 'Histoire',
+
+  'genre.horror': 'Horreur',
+
+  'genre.kids': 'Enfants',
+
+  'genre.music': 'Musique',
+
+  'genre.mystery': 'Mystère',
+
+  'genre.news': 'Actualités',
+
+  'genre.reality': 'Téléréalité',
+
+  'genre.romance': 'Romance',
+
+  'genre.scifi': 'Science-fiction',
+
+  'genre.scifiFantasy': 'Science-fiction et fantastique',
+
+  'genre.soap': 'Feuilleton',
+
+  'genre.talk': 'Talk-show',
+
+  'genre.thriller': 'Thriller',
+
+  'genre.tvMovie': 'Téléfilm',
+
+  'genre.war': 'Guerre',
+
+  'genre.warPolitics': 'Guerre et politique',
+
+  'genre.western': 'Western',
   'catalog.addWatchlist': 'Ajouter à Ma liste',
   'catalog.removeWatchlist': 'Retirer de Ma liste',
   'catalog.watchlistAdded': 'Ajouté à Ma liste',
@@ -316,6 +383,12 @@ export const FR_MESSAGES = {
   'settings.apiKey': 'Clé API',
   'settings.assrtToken': 'Jeton API',
   'settings.assrtDescription': 'Assrt.net propose principalement des sous-titres chinois. Le jeton est facultatif ; laissez vide pour utiliser le jeton partagé.',
+
+  'settings.trailers': 'Bandes-annonces',
+
+  'settings.tmdbApiKey': 'Clé API TMDB',
+
+  'settings.tmdbApiKeyHint': 'Facultatif. Améliore la recherche des bandes-annonces.',
   'settings.username': 'Nom d’utilisateur',
   'settings.password': 'Mot de passe',
   'settings.dataManagement': 'Gestion des données',

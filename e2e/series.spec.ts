@@ -23,6 +23,7 @@ async function seedSeries(page: import('@playwright/test').Page): Promise<void> 
     if (url.includes('get_series')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
         { series_id: 1, name: 'Series One', cover: '', category_id: '1' },
+        { series_id: 2, name: 'Series Two', cover: '', category_id: '1' },
       ]) });
     }
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
@@ -237,4 +238,47 @@ test('opening the section with the pointer leaves the catalog where it loads', a
   const parked = page.locator('#view-series .focused-parked');
   await expect(parked).toHaveCount(1);
   expect(await parked.getAttribute('data-key')).toBe(await first.getAttribute('data-key'));
+});
+
+test('the hero follows the resting focus, and Up/Down move between its buttons and the rail', async ({ page }) => {
+  await seedSeries(page);
+  await routeLiveManifest(page);
+  await page.goto('/');
+  await expect(page.locator('#view-channels')).toBeVisible();
+  await enterTab(page, 'series');
+  const view = page.locator('#view-series');
+  await expect(view.locator('.catalog-tile[data-item-id="2"]')).toContainText('Series Two');
+  await expect(view.locator('.catalog-hero-title')).toHaveText('Series One');
+
+  await page.keyboard.press('ArrowDown');
+  await expect(view.locator('.catalog-tile[data-item-id="1"].focused')).toHaveCount(1);
+  await page.keyboard.press('ArrowRight');
+  await expect(view.locator('.catalog-tile[data-item-id="2"].focused')).toHaveCount(1);
+  await expect(view.locator('.catalog-hero-title')).toHaveText('Series Two');
+
+  // Up from the first rail reaches the hero's buttons; the hero keeps its item.
+  await page.keyboard.press('ArrowUp');
+  await expect(view.locator('[data-hero-action="play"].focused')).toHaveCount(1);
+  await expect(view.locator('.focused')).toHaveCount(1);
+  await page.keyboard.press('ArrowRight');
+  await expect(view.locator('[data-hero-action="trailer"].focused')).toHaveCount(1);
+  await page.keyboard.press('ArrowRight');
+  await expect(view.locator('[data-hero-action="info"].focused')).toHaveCount(1);
+  await expect(view.locator('.catalog-hero-title')).toHaveText('Series Two');
+  const hero = await view.locator('[data-hero-action="info"]').boundingBox();
+  const rail = await view.locator('.catalog-tile[data-item-id="1"]').boundingBox();
+  expect(hero!.y + hero!.height).toBeLessThan(rail!.y);
+
+  // Down returns to the tile focus came from.
+  await page.keyboard.press('ArrowDown');
+  await expect(view.locator('.catalog-tile[data-item-id="2"].focused')).toHaveCount(1);
+
+  // More info opens the detail; Back lands on the hero button again.
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Enter');
+  await expect(view.locator('.series-detail .detail-title')).toHaveText('Series Two');
+  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 461, bubbles: true })));
+  await expect(view.locator('[data-hero-action="info"].focused')).toHaveCount(1);
 });

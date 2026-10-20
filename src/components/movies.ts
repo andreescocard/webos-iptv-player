@@ -1,10 +1,10 @@
 import type { PlaylistEntry, VodCategory, VodItem, VodInfo, ResumeKind, WatchlistEntry, VodQueueItem } from '../types';
-import { html, raw, Safe } from '../utils/dom';
+import { html, Safe } from '../utils/dom';
 import { morph } from '../utils/morph';
 import { StorageService } from '../services/storage-service';
 import { loadVodCategories, loadVodStreams, loadVodInfo } from '../services/xtream-catalog';
 import { xtreamVodUrl } from '../utils/xtream-url';
-import { CatalogView } from './catalog-view';
+import { CatalogView, buildFacts, catalogButton, catalogFacts, type CatalogAction, type HeroMeta, type TrailerTarget } from './catalog-view';
 import { PLAY_ICON, watchlistIcon } from './icons';
 import { showToast } from './toast';
 import { t, tp } from '../i18n';
@@ -25,6 +25,7 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
   private currentInfo: VodInfo | null = null;
   private openedFromWatchlist = false;
   private detailController: AbortController | null = null;
+  private heroPlayRequest = 0;
 
   protected loadCategories(
     account: PlaylistEntry,
@@ -43,6 +44,63 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
   protected itemName(v: VodItem): string { return v.name; }
   protected itemPoster(v: VodItem): string { return v.poster; }
   protected itemCategoryId(v: VodItem): string { return v.categoryId; }
+  protected itemRating(v: VodItem): string { return v.rating; }
+
+  protected async loadHeroMeta(
+    account: PlaylistEntry,
+    vod: VodItem,
+    signal: AbortSignal,
+  ): Promise<HeroMeta | null> {
+    const info = await loadVodInfo(account, vod.streamId, signal);
+    if (!info) return null;
+    return {
+      backdrop: info.backdrop || '',
+      plot: info.plot,
+      genre: info.genre,
+      year: movieYear(info),
+      rating: '',
+      duration: movieMinutes(info),
+      trailer: info.trailer,
+      tmdbId: info.tmdbId,
+    };
+  }
+
+  protected detailItem(): VodItem | null { return this.currentVod; }
+
+  protected trailerTarget(vod: VodItem): TrailerTarget | null {
+    const info = this.currentVod === vod ? this.currentInfo : null;
+    const meta = this.heroMeta(vod);
+    return {
+      kind: 'movie',
+      title: vod.name,
+      year: info ? movieYear(info) : meta?.year,
+      panelTrailer: info?.trailer ?? meta?.trailer,
+      genre: info?.genre || meta?.genre || undefined,
+      category: this.categories.find(c => c.id === vod.categoryId)?.name,
+      tmdbId: info?.tmdbId || meta?.tmdbId || undefined,
+    };
+  }
+
+  protected heroPlayLabel(vod: VodItem): string {
+    const saved = this.account ? StorageService.getResume(this.account.id, 'vod', vod.streamId) : null;
+    return t(saved ? 'common.resume' : 'catalog.play');
+  }
+
+  // Plays (or resumes) the hero's movie as its detail screen would; the
+  // detail info adds subtitles and search ids, and is usually cached by now.
+  protected playFromHero(vod: VodItem): void {
+    const account = this.account;
+    const signal = this.requestSignal;
+    if (!account || !signal) return;
+    const request = ++this.heroPlayRequest;
+    const resume = !!StorageService.getResume(account.id, 'vod', vod.streamId);
+    void loadVodInfo(account, vod.streamId, signal)
+      .catch((): VodInfo | null => null)
+      .then((info) => {
+        if (signal.aborted || request !== this.heroPlayRequest || this.account?.id !== account.id) return;
+        this.startVod(vod, info, resume, false);
+      });
+  }
   protected clearDetail(): void {
     this.detailController?.abort();
     this.detailController = null;
@@ -172,24 +230,29 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
 
   private play(resume: boolean): void {
     const vod = this.currentVod;
+    if (!vod) return;
+    this.startVod(vod, this.currentInfo, resume, this.openedFromWatchlist);
+  }
+
+  private startVod(vod: VodItem, info: VodInfo | null, resume: boolean, fromWatchlist: boolean): void {
     const a = this.account;
-    if (!vod || !a) return;
+    if (!a) return;
     const saved = StorageService.getResume(a.id, 'vod', vod.streamId);
     this.handlers.onPlayVod({
       url: this.vodUrl(vod),
       title: vod.name,
-      poster: this.currentInfo?.poster || vod.poster,
+      poster: info?.poster || vod.poster,
       accountId: a.id,
       itemId: vod.streamId,
       kind: 'vod',
       categoryId: vod.categoryId,
       resumeSecs: resume && saved ? saved.position : 0,
-      subtitles: this.currentInfo?.subtitles ?? [],
-      watchlistQueue: this.openedFromWatchlist ? this.movieWatchlistQueue(vod.streamId) : undefined,
+      subtitles: info?.subtitles ?? [],
+      watchlistQueue: fromWatchlist ? this.movieWatchlistQueue(vod.streamId) : undefined,
       searchMeta: {
-        imdbId: this.currentInfo?.imdbId || undefined,
-        tmdbId: this.currentInfo?.tmdbId || undefined,
-        year: this.currentInfo?.year || undefined,
+        imdbId: info?.imdbId || undefined,
+        tmdbId: info?.tmdbId || undefined,
+        year: info?.year || undefined,
       },
     });
   }
@@ -229,38 +292,46 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
     const info = this.currentInfo;
     const saved = StorageService.getResume(a.id, 'vod', vod.streamId);
     const poster = info?.poster || vod.poster;
-    const year = info ? (info.releaseDate.match(/\d{4}/) || [''])[0] : '';
-    const mins = info && info.durationSecs > 0
-      ? t('catalog.minutes', { count: Math.floor(info.durationSecs / 60) })
-      : '';
-    const meta = [year, mins, info?.genre, vod.rating].filter((s) => !!s);
+    const year = info ? movieYear(info) : '';
+    const actions: CatalogAction[] = [];
+    if (saved) actions.push({ id: 'resume', label: t('common.resume'), icon: PLAY_ICON, primary: true });
+    actions.push({
+      id: 'play', label: t(saved ? 'catalog.playFromStart' : 'catalog.play'), icon: PLAY_ICON, primary: !saved,
+    });
+    const facts = buildFacts({ rating: vod.rating, year, duration: info ? movieMinutes(info) : '', genre: info?.genre });
     const watchlisted = StorageService.isWatchlisted(a.id, 'vod', vod.streamId);
+    actions.push({
+      id: 'watchlist',
+      label: t(watchlisted ? 'catalog.removeWatchlist' : 'catalog.addWatchlist'),
+      icon: watchlistIcon(watchlisted),
+    });
 
     morph(this.layer('detail'), html`
       <div class="catalog-view movies-detail" data-nav-container>
         <div class="detail-poster-wrap">${this.posterCell(vod.name, poster)}</div>
         <div class="detail-body">
           <h1 class="detail-title">${vod.name}</h1>
-          <div class="detail-meta">${meta.join('  ·  ')}</div>
-          ${info?.plot ? html`<p class="detail-plot">${info.plot}</p>` : ''}
+          <div class="detail-meta">${catalogFacts(facts)}</div>
+          ${this.detailPlot(info?.plot ?? '')}
           ${info?.cast ? html`<div class="detail-cast"><span class="detail-label">${t('catalog.cast')}</span> ${info.cast}</div>` : ''}
           ${info?.director ? html`<div class="detail-cast"><span class="detail-label">${t('catalog.director')}</span> ${info.director}</div>` : ''}
           <div class="detail-actions">
-            ${saved ? html`
-              <button class="detail-btn detail-btn-primary" data-focusable data-key="resume" data-action="resume">
-                <span class="detail-btn-icon">${raw(PLAY_ICON)}</span><span>${t('common.resume')}</span>
-              </button>` : ''}
-            <button class="detail-btn ${saved ? '' : 'detail-btn-primary'}" data-focusable data-key="play" data-action="play">
-              <span class="detail-btn-icon">${raw(PLAY_ICON)}</span><span>${t(saved ? 'catalog.playFromStart' : 'catalog.play')}</span>
-            </button>
-            <button class="detail-btn" data-focusable data-key="watchlist" data-action="watchlist">
-              <span class="detail-btn-icon">${raw(watchlistIcon(watchlisted))}</span>
-              <span>${t(watchlisted ? 'catalog.removeWatchlist' : 'catalog.addWatchlist')}</span>
-            </button>
+            ${actions.concat(this.extraDetailActions()).map((action) => catalogButton(action, 'detail'))}
           </div>
         </div>
       </div>
     `);
+    if (this.measureDetailPlot()) return;
     this.settleDetailFocus();
   }
+}
+
+function movieMinutes(info: VodInfo): string {
+  return info.durationSecs > 0 ? t('catalog.minutes', { count: Math.floor(info.durationSecs / 60) }) : '';
+}
+
+function movieYear(info: VodInfo): string {
+  const match = info.releaseDate.match(/\d{4}/);
+  if (match) return match[0];
+  return info.year ? String(info.year) : '';
 }
