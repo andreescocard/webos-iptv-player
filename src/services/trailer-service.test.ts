@@ -47,6 +47,17 @@ const results = (...pairs: [string, string][]) => JSON.stringify({
   })),
 });
 
+// Same shape with each renderer's lengthText, when the row has one.
+const timedResults = (...rows: [string, string, string?][]) => JSON.stringify({
+  contents: rows.map(([videoId, title, length]) => ({
+    videoRenderer: {
+      videoId,
+      title: { runs: [{ text: title }] },
+      ...(length ? { lengthText: { simpleText: length } } : {}),
+    },
+  })),
+});
+
 beforeEach(() => {
   clearTrailerCache();
   localStorage.clear();
@@ -367,6 +378,30 @@ describe('resolveTrailer', () => {
     const fn = stubFetch(u => (isOembed(u) ? { status: 200 } : {
       status: 200,
       body: results([BAD, 'Bravo trailer'], [GOOD, 'Charlie trailer']),
+    }));
+    expect(await resolveTrailer({ ...base, language: 'en-US' })).toEqual({ kind: 'none' });
+    expect(fn.mock.calls.some(c => isOembed(c[0]))).toBe(false);
+  });
+
+  it('skips a full-length movie upload for the trailer below it', async () => {
+    const fn = stubFetch(u => (isOembed(u) ? { status: 200 } : {
+      status: 200,
+      body: timedResults(
+        [BAD, 'Alpha Trailer Filme Completo Dublado', '1:52:10'],
+        [GOOD, 'Alpha Trailer Oficial Dublado', '2:10'],
+      ),
+    }));
+    expect(await resolveTrailer({ ...base, language: 'en-US' }))
+      .toEqual({ kind: 'video', videoId: GOOD, source: 'youtube' });
+    const oembeds = fn.mock.calls.map(c => c[0]).filter(isOembed);
+    expect(oembeds).toHaveLength(1);
+    expect(oembeds[0]).toContain(GOOD);
+  });
+
+  it('falls through to none when the only title match is a long upload', async () => {
+    const fn = stubFetch(u => (isOembed(u) ? { status: 200 } : {
+      status: 200,
+      body: timedResults([BAD, 'Alpha Full Movie', '1:45:02']),
     }));
     expect(await resolveTrailer({ ...base, language: 'en-US' })).toEqual({ kind: 'none' });
     expect(fn.mock.calls.some(c => isOembed(c[0]))).toBe(false);

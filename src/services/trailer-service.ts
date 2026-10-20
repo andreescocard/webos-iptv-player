@@ -323,6 +323,16 @@ function innertubeLocale(language: string): { hl: string; gl?: string } {
 export interface ScrapedVideo {
   videoId: string;
   title: string;
+  /** Undefined when the result shows no length (live, unlisted, or a bare fallback scan). */
+  durationSec?: number;
+}
+
+// "2:31" -> 151, "1:45:02" -> 6302; anything else is unknown.
+function durationSeconds(text: unknown): number | undefined {
+  if (typeof text !== 'string') return undefined;
+  const m = /^(?:(\d+):)?(\d{1,2}):(\d{2})$/.exec(text.trim());
+  if (!m) return undefined;
+  return Number(m[1] || 0) * 3600 + Number(m[2]) * 60 + Number(m[3]);
 }
 
 function titleText(title: unknown): string {
@@ -341,9 +351,14 @@ function walkVideos(node: unknown, out: ScrapedVideo[]): void {
   }
   if (!node || typeof node !== 'object') return;
   const obj = node as Record<string, unknown>;
-  const renderer = obj.videoRenderer as { videoId?: unknown; title?: unknown } | undefined;
+  const renderer = obj.videoRenderer as
+    { videoId?: unknown; title?: unknown; lengthText?: { simpleText?: unknown } } | undefined;
   if (renderer && typeof renderer.videoId === 'string' && ID_RE.test(renderer.videoId)) {
-    out.push({ videoId: renderer.videoId, title: titleText(renderer.title) });
+    out.push({
+      videoId: renderer.videoId,
+      title: titleText(renderer.title),
+      durationSec: durationSeconds(renderer.lengthText?.simpleText),
+    });
     return;
   }
   for (const key of Object.keys(obj)) walkVideos(obj[key], out);
@@ -385,6 +400,10 @@ function titleWords(s: string): string[] {
     .filter(Boolean);
 }
 
+const MAX_TRAILER_SECONDS = 360;
+const UNKNOWN_LENGTH_PENALTY = 3;
+const FULL_MOVIE_RE = /\b(filme completo|full movie|completo dublado|pelicula completa|film complet)\b/;
+
 // Keeps only titles containing every significant word of the item, best first.
 export function rankScrapedVideos(
   videos: ScrapedVideo[],
@@ -403,7 +422,11 @@ export function rankScrapedVideos(
     const have = titleWords(video.title);
     if (!needed.every(w => have.indexOf(w) !== -1)) return;
     const text = have.join(' ');
-    let score = /trailer/.test(text) ? 2 : 0;
+    if (FULL_MOVIE_RE.test(text)) return;
+    if (video.durationSec !== undefined && video.durationSec > MAX_TRAILER_SECONDS) return;
+    let score = /trailer|teaser/.test(text) ? 2 : 0;
+    // An unknown length ranks below any candidate whose short length is shown.
+    if (video.durationSec === undefined) score -= UNKNOWN_LENGTH_PENALTY;
     if (animated) {
       if (/\blive action\b|\bfilme live\b/.test(text)) score -= 5;
     } else if (have.some(w => w === 'anime' || w === 'animacao')) {
