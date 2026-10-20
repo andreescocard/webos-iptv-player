@@ -21,6 +21,8 @@ const {
     loadAllVodStreams: vi.fn(),
     loadAllSeries: vi.fn(),
     onCatalogListRefreshed: vi.fn(),
+    onCatalogFillChanged: vi.fn(),
+    getCatalogFill: vi.fn((): { done: number; total: number } | null => null),
   },
   playlistMock: {
     channels: [] as unknown[],
@@ -139,6 +141,7 @@ beforeEach(() => {
   });
   playlistMock.indexOf.mockReturnValue(0);
   playlistMock.getChannelCacheSource.mockReturnValue(null);
+  catalogMock.getCatalogFill.mockReturnValue(null);
   epgMock.programmeCacheOrigin.mockReturnValue(null);
   cacheMock.records.clear();
   epgMock.programmes = {};
@@ -2421,5 +2424,42 @@ describe('Search (M3U-only, no account)', () => {
     container.dispatchEvent(new MouseEvent('click', { clientX: 100, clientY: 50, bubbles: true }));
     document.elementFromPoint = orig;
     expect(handlers.onPlayChannel).toHaveBeenCalledWith(5);
+  });
+});
+
+describe('Search catalog fill', () => {
+  const fillChanged = () => catalogMock.onCatalogFillChanged.mock.calls[0][0] as (accountId: string) => void;
+  const note = () => container.querySelector('.search-note');
+
+  it('notes incomplete results while a catalog fills and clears the note when it ends', async () => {
+    const { view } = await openWith({ vod: [vod('10', 'Alpha Movie')] });
+    await view.setQuery('alpha');
+    expect(note()).toBeNull();
+
+    catalogMock.getCatalogFill.mockImplementation((_id: string, resource: string) =>
+      resource === 'series_all' ? { done: 3, total: 35 } : null);
+    fillChanged()('x1');
+    expect(note()?.textContent).toBe('Catalog still loading. Results may be incomplete.');
+    expect(note()?.hasAttribute('data-focusable')).toBe(false);
+    expect(container.textContent).toContain('Alpha Movie');
+
+    catalogMock.getCatalogFill.mockReturnValue(null);
+    fillChanged()('x1');
+    expect(note()).toBeNull();
+  });
+
+  it('re-runs the query on new catalog data when a fill it did not start ends', async () => {
+    const { view } = await openWith({ vod: [vod('10', 'Alpha Movie')] });
+    await view.setQuery('movie');
+    expect(container.textContent).not.toContain('Bravo Movie');
+
+    catalogMock.getCatalogFill.mockReturnValue({ done: 1, total: 2 });
+    fillChanged()('x1');
+    catalogMock.loadAllVodStreams.mockResolvedValue([vod('10', 'Alpha Movie'), vod('11', 'Bravo Movie')]);
+    catalogMock.getCatalogFill.mockReturnValue(null);
+    fillChanged()('x1');
+
+    await vi.waitFor(() => expect(container.textContent).toContain('Bravo Movie'));
+    expect(note()).toBeNull();
   });
 });

@@ -141,6 +141,47 @@ export function onCatalogListRefreshed(listener: (key: string, changed?: boolean
   };
 }
 
+export type CatalogFillResource = 'vod_all' | 'series_all';
+
+export interface CatalogFillProgress {
+  done: number;
+  /** Zero until the category list is known. */
+  total: number;
+}
+
+const fills = new Map<string, CatalogFillProgress>();
+const fillListeners: Array<(accountId: string, resource: CatalogFillResource) => void> = [];
+
+/** Progress of a cold whole-catalog fill, or null when none is running. */
+export function getCatalogFill(
+  accountId: string,
+  resource: CatalogFillResource,
+): CatalogFillProgress | null {
+  return fills.get(`${accountId}|${resource}`) ?? null;
+}
+
+/** Called whenever a cold fill starts, advances, or ends. */
+export function onCatalogFillChanged(
+  listener: (accountId: string, resource: CatalogFillResource) => void,
+): () => void {
+  fillListeners.push(listener);
+  return () => {
+    const index = fillListeners.indexOf(listener);
+    if (index >= 0) fillListeners.splice(index, 1);
+  };
+}
+
+function setCatalogFill(
+  accountId: string,
+  resource: CatalogFillResource,
+  progress: CatalogFillProgress | null,
+): void {
+  const key = `${accountId}|${resource}`;
+  if (progress) fills.set(key, progress);
+  else fills.delete(key);
+  for (const listener of fillListeners.slice()) listener(accountId, resource);
+}
+
 // Refresh independently of the view. Unchanged catalogs only renew freshness,
 // preserving the payload version and its prepared worker index.
 function refreshListInBackground<T>(
@@ -494,11 +535,17 @@ async function fetchWholeCatalog<T extends { categoryId: string }>(
       return expired;
     },
   };
+  // A refresh over a cached copy keeps serving it, so only a cold fill counts.
+  const progress: CatalogFillProgress | null = previous === undefined ? { done: 0, total: 0 } : null;
+  if (progress) setCatalogFill(accountId, resource, progress);
   try {
     return await fetchCatalogPartitions(
-      accountId, resource, context, fetchItems, fetchCategories, itemId, previous,
+      accountId, resource, context, fetchItems, fetchCategories, itemId, previous, progress,
     );
   } finally {
+    if (progress && fills.get(`${accountId}|${resource}`) === progress) {
+      setCatalogFill(accountId, resource, null);
+    }
     clearTimeout(timer);
     signal?.removeEventListener('abort', cancel);
     controller.abort();
@@ -527,6 +574,7 @@ async function fetchCatalogPartitions<T extends { categoryId: string }>(
   fetchCategories: (signal?: AbortSignal) => Promise<Array<{ id: string }>>,
   itemId: (item: T) => string,
   previous?: T[],
+  progress: CatalogFillProgress | null = null,
 ): Promise<CatalogListResult<T>> {
   const { generation, signal } = context;
   const oldPartitions = new Map<string, T[]>();
@@ -554,6 +602,10 @@ async function fetchCatalogPartitions<T extends { categoryId: string }>(
   const categoryIds = Array.from(new Set(categories.data.map(category => category.id)));
   const start = Math.max(0, categoryIds.indexOf(cursor?.data.nextCategory ?? ''));
   const partitions = new Map<string, CatalogPartition<T>>();
+  if (progress) {
+    progress.total = categoryIds.length;
+    setCatalogFill(accountId, resource, progress);
+  }
   let next = 0;
   let lastStarted: string | null = null;
   const load = async (): Promise<void> => {
@@ -571,6 +623,10 @@ async function fetchCatalogPartitions<T extends { categoryId: string }>(
         oldPartitions.get(categoryId),
       );
       partitions.set(categoryId, partition);
+      if (progress) {
+        progress.done++;
+        setCatalogFill(accountId, resource, progress);
+      }
     }
   };
   const loads: Array<Promise<void>> = [];

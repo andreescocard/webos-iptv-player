@@ -23,6 +23,7 @@
 .search-input.focused { border-color: var(--accent, #3ea6ff); }
 .search-results { display: block; }
 .search-empty { margin-top: 40px; }
+.search-note { margin-bottom: 24px; font-size: 24px; }
 
 .search-virtual-section { margin-bottom: 28px; }
 

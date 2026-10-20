@@ -11,9 +11,11 @@ import { StorageService } from '../services/storage-service';
 import { XtreamArchiveService } from '../services/xtream-archive';
 import { persistSearchIndexes } from '../services/search-index-store';
 import {
+  getCatalogFill,
   getSearchCatalogExpiresAt,
   loadAllSeries,
   loadAllVodStreams,
+  onCatalogFillChanged,
   onCatalogListRefreshed,
 } from '../services/xtream-catalog';
 import {
@@ -182,6 +184,7 @@ export class Search {
   // Shared by a reopen, so closing Search does not restart the load.
   private catalogLoad: { accountId: string; promise: Promise<CatalogSources> } | null = null;
   private catalogLoading = false;
+  private fillShown = false;
   // Until every source is indexed, queries wait and the results show a hint.
   private pendingIndex: PendingIndex | null = null;
   private active = false;
@@ -238,6 +241,27 @@ export class Search {
     this.container.addEventListener('click', (e: MouseEvent) => this.onPointerRelease(e.clientX, e.clientY));
     this.container.addEventListener('scroll', (e: Event) => this.onVirtualScroll(e), true);
     onCatalogListRefreshed((key, changed) => this.onCatalogRefreshed(key, changed));
+    onCatalogFillChanged(accountId => this.onCatalogFill(accountId));
+  }
+
+  private catalogFilling(accountId: string): boolean {
+    return !!getCatalogFill(accountId, 'vod_all') || !!getCatalogFill(accountId, 'series_all');
+  }
+
+  // Only a fill starting or ending changes what Search shows, not each category.
+  private onCatalogFill(accountId: string): void {
+    const account = this.account;
+    if (!account || account.id !== accountId || !this.active) return;
+    const filling = this.catalogFilling(accountId);
+    if (filling === this.fillShown) return;
+    this.fillShown = filling;
+    // A fill Search did not start (it runs its own load) leaves a complete cache to index.
+    if (!filling && !this.pendingIndex && !this.catalogLoad) {
+      this.loadedFor = null;
+      this.catalogExpiresAt = 0;
+      this.refreshCatalogIndex(account);
+    }
+    this.render();
   }
 
   private onPointerRelease(x: number, y: number): void {
@@ -281,6 +305,7 @@ export class Search {
       this.catalogExpiresAt = 0;
     }
     this.account = account;
+    this.fillShown = !!account && this.catalogFilling(account.id);
     this.query = query;
     this.resultLimit = CONFIG.SEARCH.INITIAL_RESULTS;
     if (!reuseWorkerIndex) {
@@ -1623,6 +1648,9 @@ export class Search {
         hasMixedLists ? 'search-lists-mixed' : ''
       }" data-nav-container data-search-query="${q}"
            data-search-pending="${this.queryPending ? 'true' : 'false'}">
+        ${q && isXtream && this.catalogFilling(this.account!.id)
+          ? html`<p class="catalog-hint search-note" role="status">${t('search.catalogLoading')}</p>`
+          : ''}
         <div class="search-results">${resultsBody}</div>
       </div>
     `);

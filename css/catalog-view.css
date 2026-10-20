@@ -54,6 +54,9 @@
   font-size: 22px; letter-spacing: 4px; font-weight: 700;
   color: var(--accent); text-transform: uppercase;
 }
+.catalog-fill {
+  margin-top: 16px; font-size: 24px; color: var(--text-secondary);
+}
 .catalog-hero-title {
   margin: 12px 0 0; font-size: 64px; font-weight: 800;
   color: var(--text-primary); line-height: 1.05;

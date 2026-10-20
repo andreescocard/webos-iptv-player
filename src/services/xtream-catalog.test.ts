@@ -54,7 +54,9 @@ vi.mock('./idb-cache', () => ({
 }));
 
 import {
+  getCatalogFill,
   getSearchCatalogExpiresAt,
+  onCatalogFillChanged,
   loadAllSeries,
   loadAllVodStreams,
   loadSeries,
@@ -1113,5 +1115,63 @@ describe('xtream-catalog whole-catalog (search)', () => {
       data: [], state: { complete: true },
     });
     expect(cacheStore.get('x1|series|1')?.data).toEqual([]);
+  });
+});
+
+describe('xtream-catalog fill progress', () => {
+  const categories = [{ id: '1', name: 'A' }, { id: '2', name: 'B' }, { id: '3', name: 'C' }];
+
+  it('reports done/total per category during a cold fill and clears it after', async () => {
+    clientMock.getVodCategories.mockResolvedValue(categories);
+    const releases: Array<() => void> = [];
+    clientMock.getVodStreams.mockImplementation((id: string) => new Promise(resolve => {
+      releases.push(() => resolve([{ accountId: 'x1', streamId: id, name: `Item ${id}`, categoryId: id }]));
+    }));
+    const seen: Array<string | null> = [];
+    const stop = onCatalogFillChanged((accountId, resource) => {
+      const fill = getCatalogFill(accountId, resource);
+      seen.push(fill ? `${resource} ${fill.done}/${fill.total}` : `${resource} idle`);
+    });
+    expect(getCatalogFill('x1', 'vod_all')).toBeNull();
+
+    const pending = loadAllVodStreams(account);
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    expect(getCatalogFill('x1', 'vod_all')).toEqual({ done: 0, total: 3 });
+    expect(getCatalogFill('x1', 'series_all')).toBeNull();
+    expect(getCatalogFill('other', 'vod_all')).toBeNull();
+
+    releases.shift()!();
+    await vi.waitFor(() => expect(getCatalogFill('x1', 'vod_all')?.done).toBe(1));
+    let finished = false;
+    void pending.then(() => { finished = true; });
+    while (!finished) {
+      releases.splice(0).forEach(release => release());
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    expect(getCatalogFill('x1', 'vod_all')).toBeNull();
+    expect(seen).toContain('vod_all 1/3');
+    expect(seen).toContain('vod_all 3/3');
+    expect(seen[seen.length - 1]).toBe('vod_all idle');
+    stop();
+  });
+
+  it('clears the fill when the load fails', async () => {
+    clientMock.getVodCategories.mockResolvedValue(categories);
+    clientMock.getVodStreams.mockRejectedValue(new Error('boom'));
+    await loadAllVodStreams(account).catch(() => undefined);
+    expect(getCatalogFill('x1', 'vod_all')).toBeNull();
+  });
+
+  it('does not report a refresh over a cached catalog as a fill', async () => {
+    const stale = Date.now() - CONFIG.XTREAM.DEFAULT_CATALOG_REFRESH_INTERVAL_MS - 1;
+    cacheStore.set('x1|vod_all', { key: 'x1|vod_all', timestamp: stale, data: [{ accountId: 'x1', streamId: 'old', categoryId: '1' }] });
+    clientMock.getVodStreams.mockResolvedValue([{ accountId: 'x1', streamId: '10', categoryId: '1' }]);
+    const listener = vi.fn();
+    const stop = onCatalogFillChanged(listener);
+    await loadAllVodStreams(account);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(listener).not.toHaveBeenCalled();
+    stop();
   });
 });

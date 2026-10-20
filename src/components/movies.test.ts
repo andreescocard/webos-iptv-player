@@ -5,7 +5,7 @@ import type { Action, PlaylistEntry, WatchlistEntry, WatchlistKind } from '../ty
 const { catalogMock, storageMock, watchlistState, toastMock } = vi.hoisted(() => {
   const watchlistState = { entries: [] as WatchlistEntry[] };
   return {
-    catalogMock: { loadVodCategories: vi.fn(), loadVodStreams: vi.fn(), loadVodInfo: vi.fn() },
+    catalogMock: { loadVodCategories: vi.fn(), loadVodStreams: vi.fn(), loadVodInfo: vi.fn(), getCatalogFill: vi.fn((): { done: number; total: number } | null => null), onCatalogFillChanged: vi.fn() },
     watchlistState,
     storageMock: {
       getResumeList: vi.fn(() => [] as unknown[]),
@@ -65,6 +65,7 @@ beforeEach(() => {
   // return so a prior test's mockReturnValue override doesn't leak (order-safety).
   storageMock.getResumeList.mockReturnValue([]);
   storageMock.getResume.mockReturnValue(null);
+  catalogMock.getCatalogFill.mockReturnValue(null);
   watchlistState.entries = [];
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -1188,5 +1189,53 @@ describe('Movies account-switch race', () => {
     expect(container.textContent).not.toContain('Alpha Movie');
     expect(container.textContent).toContain('Cat Bravo');
     expect(container.textContent).not.toContain('Cat Alpha');
+  });
+});
+
+describe('Movies catalog fill indicator', () => {
+  const fillChanged = () => catalogMock.onCatalogFillChanged.mock.calls[0][0] as
+    (accountId: string, resource: string) => void;
+  const note = () => container.querySelector<HTMLElement>('.catalog-fill');
+
+  it('shows progress while the catalog fills and drops it when done, without taking focus', async () => {
+    const { view } = await openWith();
+    const focusables = container.querySelectorAll('[data-focusable]').length;
+    expect(note()).toBeNull();
+
+    catalogMock.getCatalogFill.mockReturnValue({ done: 12, total: 35 });
+    fillChanged()('x1', 'vod_all');
+    expect(note()?.textContent).toBe('Loading catalog… 12/35');
+    expect(note()?.closest('[data-focusable]')).toBeNull();
+    expect(note()?.hasAttribute('data-focusable')).toBe(false);
+    expect(container.querySelectorAll('[data-focusable]').length).toBe(focusables);
+    expect(container.querySelector('.catalog-tile[data-item-id="10"]')).not.toBeNull();
+
+    catalogMock.getCatalogFill.mockReturnValue({ done: 13, total: 35 });
+    fillChanged()('x1', 'vod_all');
+    expect(note()?.textContent).toBe('Loading catalog… 13/35');
+
+    catalogMock.getCatalogFill.mockReturnValue(null);
+    fillChanged()('x1', 'vod_all');
+    expect(note()).toBeNull();
+    view.deactivate();
+  });
+
+  it('ignores another catalog or account', async () => {
+    await openWith();
+    catalogMock.getCatalogFill.mockReturnValue({ done: 1, total: 2 });
+    fillChanged()('x1', 'series_all');
+    fillChanged()('other', 'vod_all');
+    expect(note()).toBeNull();
+  });
+
+  it('shows loading, not the empty message, while a fill is pending', async () => {
+    catalogMock.getCatalogFill.mockReturnValue({ done: 0, total: 0 });
+    const { view } = await openWith([], []);
+    expect(container.querySelector('.catalog-empty')?.textContent).toBe('Loading catalog…');
+    catalogMock.getCatalogFill.mockReturnValue(null);
+    (catalogMock.onCatalogFillChanged.mock.calls[0][0] as (a: string, r: string) => void)('x1', 'vod_all');
+    expect(container.querySelector('.catalog-empty')?.textContent)
+      .toBe('No movies are available for this account.');
+    view.deactivate();
   });
 });

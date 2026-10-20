@@ -5,7 +5,7 @@ import type { PlaylistEntry, WatchlistEntry, WatchlistKind } from '../types';
 const { catalogMock, storageMock, watchlistState, toastMock } = vi.hoisted(() => {
   const watchlistState = { entries: [] as WatchlistEntry[] };
   return {
-    catalogMock: { loadSeriesCategories: vi.fn(), loadSeries: vi.fn(), loadSeriesInfo: vi.fn() },
+    catalogMock: { loadSeriesCategories: vi.fn(), loadSeries: vi.fn(), loadSeriesInfo: vi.fn(), getCatalogFill: vi.fn((): { done: number; total: number } | null => null), onCatalogFillChanged: vi.fn() },
     watchlistState,
     storageMock: {
       getResumeList: vi.fn(() => [] as unknown[]),
@@ -53,6 +53,7 @@ beforeEach(() => {
   // prior test's mockReturnValue override doesn't leak (order-safety).
   storageMock.getResumeList.mockReturnValue([]);
   storageMock.getResume.mockReturnValue(null);
+  catalogMock.getCatalogFill.mockReturnValue(null);
   watchlistState.entries = [];
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -606,5 +607,22 @@ describe('Series deep-link (openItem)', () => {
     logs.mockRestore();
     expect(onDetailBack).toHaveBeenCalledTimes(1);
     expect(handlers.onBack).not.toHaveBeenCalled();
+  });
+});
+
+describe('Series catalog fill indicator', () => {
+  it('shows progress for the series catalog only, and drops it when done', async () => {
+    await openWith();
+    const fillChanged = catalogMock.onCatalogFillChanged.mock.calls[0][0] as
+      (accountId: string, resource: string) => void;
+    catalogMock.getCatalogFill.mockReturnValue({ done: 12, total: 35 });
+    fillChanged('x1', 'vod_all');
+    expect(container.querySelector('.catalog-fill')).toBeNull();
+    fillChanged('x1', 'series_all');
+    expect(container.querySelector('.catalog-fill')?.textContent).toBe('Loading catalog… 12/35');
+    expect(container.querySelector('.catalog-tile')).not.toBeNull();
+    catalogMock.getCatalogFill.mockReturnValue(null);
+    fillChanged('x1', 'series_all');
+    expect(container.querySelector('.catalog-fill')).toBeNull();
   });
 });

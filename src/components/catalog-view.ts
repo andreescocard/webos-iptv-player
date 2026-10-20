@@ -22,6 +22,7 @@ import {
   isWatchlistConcealed,
   ParentalControlService,
 } from '../services/parental-control';
+import { getCatalogFill, onCatalogFillChanged } from '../services/xtream-catalog';
 import { CONFIG } from '../config';
 import { t } from '../i18n';
 import { VirtualGrid } from '../utils/virtual-grid';
@@ -126,6 +127,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   private browseReturn: BrowseReturn | null = null;
   private gridRequest = 0;
   private browseStale = false;
+  // False while the first browse render is still loading, so a fill tick can't paint it early.
+  private browseRendered = false;
   readonly focusScope: FocusScope;
   // How the element SpatialNav is picking was asked for; null only follows it.
   private pickVia: Via | null = null;
@@ -163,6 +166,10 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     // A ring the pointer left stays off; the next key only shows it again.
     this.container.addEventListener('nav:unhover', (e: Event) => {
       if (e.target === this.current()) this.focusScope.conceal();
+    });
+    onCatalogFillChanged((accountId, resource) => {
+      if (this.account?.id !== accountId || resource !== this.fillResource()) return;
+      if (this.browseRendered && this.mode === 'browse') this.renderBrowse(false);
     });
     this.container.addEventListener('scroll', (event: Event) => {
       const target = event.target as HTMLElement;
@@ -576,6 +583,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.gridVirtualizer.setScrollOffset(0);
     this.resume = this.visibleResume(account.id);
     this.clearLayer('browse');
+    this.browseRendered = false;
     this.renderLoading('browse');
     try {
       const categories = await this.loadCategories(account, signal);
@@ -1001,13 +1009,28 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     morph(this.layers[mode], this.loadingMarkup());
   }
 
+  private fillResource(): 'vod_all' | 'series_all' {
+    return this.parentalKind === 'vod' ? 'vod_all' : 'series_all';
+  }
+
+  // A passive status line: not focusable, so it never takes a ring or a key.
+  private fillNote(): Safe | '' {
+    const fill = getCatalogFill(this.account!.id, this.fillResource());
+    if (!fill) return '';
+    return html`<div class="catalog-fill" role="status">${fill.total
+      ? t('catalog.loadingProgress', { done: fill.done, total: fill.total })
+      : t('catalog.loadingCatalog')}</div>`;
+  }
+
   protected renderBrowse(restoreFocus = true): void {
+    this.browseRendered = true;
     this.showLayer('browse');
     const browse = this.layers.browse;
     this.resume = this.visibleResume(this.account!.id);
     const hero = this.railGroups[0]?.items[0] ?? this.heroFallback();
     const continueRail = this.continueRail();
     const watchlistRail = this.watchlistRail();
+    const fillNote = this.fillNote();
     const hasContent = this.categories.length > 0 || !!continueRail || !!watchlistRail;
     // A poster URL sits inside a CSS url('…') string, where the html escaper's
     // entity encoding is decoded before CSS parses it; percent-encode the
@@ -1026,7 +1049,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     morph(browse, html`
       <div class="catalog-view catalog-browse" data-nav-container>
         ${!hasContent
-          ? html`<p class="catalog-hint catalog-empty">${this.emptyMessage}</p>`
+          ? html`<p class="catalog-hint catalog-empty">${
+              fillNote ? t('catalog.loadingCatalog') : this.emptyMessage}</p>`
           : html`
             <div class="catalog-hero" style="background-image: url('${heroBg}')">
               <div class="catalog-hero-scrim"></div>
@@ -1034,6 +1058,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
             <div class="catalog-hero-body">
               <div class="catalog-hero-kicker">${this.kicker}</div>
               <h1 class="catalog-hero-title">${hero ? this.itemName(hero) : this.kicker}</h1>
+              ${fillNote}
             </div>
             <div class="catalog-rails">
               <div class="catalog-rails-spacer"></div>
