@@ -11,6 +11,7 @@ import {
   StorageService,
   XTREAM_CATALOG_REFRESH_HOUR_OPTIONS,
 } from '../services/storage-service';
+import { applyMonoAudio } from './mono-audio';
 import { EpgService } from '../services/epg-service';
 import { ChannelCustomizationService } from '../services/channel-customization';
 import { PlaylistService } from '../services/playlist-service';
@@ -703,6 +704,7 @@ export class Settings {
     this.epgOffsets = { ...this.storedEpgOffsets };
     const epgSources = this.epgSources(manualEpgSources, allPlaylists);
     const autoPlay = StorageService.getAutoPlay();
+    const monoAudio = StorageService.getMonoAudio();
     const livePreview = StorageService.getLivePreview();
     const channelCycleMode = StorageService.getChannelCycleMode();
     const showHidden = StorageService.getShowHiddenChannels();
@@ -947,6 +949,11 @@ export class Settings {
                 <div class="settings-item">
                   <div class="settings-item-title">${t('settings.autoPlay')}</div>
                   ${toggleGroup('auto-play', [{ value: 'on', label: t('settings.on') }, { value: 'off', label: t('settings.off') }], autoPlay ? 'on' : 'off')}
+                </div>
+                <div class="settings-item">
+                  <div class="settings-item-title">${t('settings.monoAudio')}</div>
+                  ${toggleGroup('mono-audio', [{ value: 'on', label: t('settings.on') }, { value: 'off', label: t('settings.off') }], monoAudio ? 'on' : 'off')}
+                  <div class="settings-item-hint">${t('settings.monoAudioHint')}</div>
                 </div>
                 <div class="settings-item">
                   <div class="settings-item-title">${t('settings.livePreview')}</div>
@@ -2801,6 +2808,13 @@ export class Settings {
 
     const autoPlayBtn = $('#auto-play .toggle-option.active', this.container);
     if (autoPlayBtn) StorageService.setAutoPlay(autoPlayBtn.dataset.value === 'on');
+
+    const monoAudioBtn = $('#mono-audio .toggle-option.active', this.container);
+    if (monoAudioBtn) {
+      const mono = monoAudioBtn.dataset.value === 'on';
+      StorageService.setMonoAudio(mono);
+      applyMonoAudio(null, mono);
+    }
 
     const livePreviewBtn = $('#live-preview-setting .toggle-option.active', this.container);
     if (livePreviewBtn) StorageService.setLivePreview(livePreviewBtn.dataset.value === 'on');

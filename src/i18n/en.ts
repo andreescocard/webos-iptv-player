@@ -369,6 +369,8 @@ export const EN_MESSAGES = {
   'settings.livePreview': 'Live preview',
   'settings.livePreviewHint': 'Watch live channels in a small window while you browse.',
   'settings.autoPlay': 'Play the last watched channel on startup',
+  'settings.monoAudio': 'Mono audio',
+  'settings.monoAudioHint': 'Plays both channels on every speaker, for setups where only one side works.',
   'settings.channelCycleMode': 'Channel Up/Down',
   'settings.channelCycleModeHint': 'Global cycles the entire channel list. Active stays within the group, Favorites, or playlist a channel was tuned from, and returns to Global if that view becomes empty.',
   'settings.channelCycleGlobal': 'Global',

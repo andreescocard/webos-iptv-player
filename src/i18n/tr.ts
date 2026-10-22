@@ -362,6 +362,8 @@ export const TR_MESSAGES = {
   'settings.livePreview': 'Canlı ön izleme',
   'settings.livePreviewHint': 'Gezinirken canlı kanalı küçük bir pencerede izleyin.',
   'settings.autoPlay': 'Başlangıçta son izlenen kanalı oynat',
+  'settings.monoAudio': 'Mono ses',
+  'settings.monoAudioHint': 'Yalnızca bir taraf çalışıyorsa her iki kanalı da tüm hoparlörlerden verir.',
   'settings.channelCycleMode': 'Kanal Yukarı/Aşağı',
   'settings.channelCycleModeHint': 'Genel, tüm kanal listesinde gezinir. Etkin, kanalın açıldığı grup, Favoriler veya oynatma listesiyle sınırlıdır; görünüm boşalırsa Genel’e döner.',
   'settings.channelCycleGlobal': 'Genel',

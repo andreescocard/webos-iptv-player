@@ -32,6 +32,7 @@ vi.mock('../services/storage-service', () => ({
     touchRecentlyWatchedLive: vi.fn(),
     getSubtitleOffset: vi.fn(() => 0), setSubtitleOffset: vi.fn(),
     getChannelCycleMode: vi.fn(() => 'global'),
+    getMonoAudio: vi.fn(() => false),
     getLiveReconnectAttempts: vi.fn(() => 3),
     getPlayerOsdTimeoutMs: vi.fn(() => 5000),
     getPlaylists: vi.fn(() => [{

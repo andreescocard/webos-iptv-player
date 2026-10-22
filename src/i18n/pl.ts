@@ -377,6 +377,8 @@ export const PL_MESSAGES = {
   'settings.livePreview': 'Podgląd na żywo',
   'settings.livePreviewHint': 'Oglądaj kanał w małym oknie podczas przeglądania.',
   'settings.autoPlay': 'Odtwarzaj ostatnio oglądany kanał po uruchomieniu',
+  'settings.monoAudio': 'Dźwięk mono',
+  'settings.monoAudioHint': 'Odtwarza oba kanały na każdym głośniku, gdy działa tylko jedna strona.',
   'settings.channelCycleMode': 'Kanał +/−',
   'settings.channelCycleModeHint': 'Tryb globalny przełącza kanały na całej liście. Tryb „Aktywny widok” ogranicza przełączanie do bieżącej grupy, Ulubionych lub playlisty, z której włączono kanał. Jeśli ten widok jest pusty, aplikacja przechodzi do trybu globalnego.',
   'settings.channelCycleGlobal': 'Globalnie',

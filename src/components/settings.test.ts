@@ -32,6 +32,7 @@ const {
     }[],
     manualEpgSources: [] as ManualEpgSource[],
     autoPlay: false,
+    monoAudio: false,
     livePreview: false,
     animationMode: 'reduced' as AnimationMode,
     theme: 'midnight' as string,
@@ -86,6 +87,7 @@ const {
         playlistIds: source.playlistIds.slice(),
       }))),
       getAutoPlay: vi.fn(() => state.autoPlay),
+      getMonoAudio: vi.fn(() => state.monoAudio),
       getLivePreview: vi.fn(() => state.livePreview),
       getAnimationMode: vi.fn(() => state.animationMode),
       getTheme: vi.fn(() => state.theme),
@@ -122,6 +124,7 @@ const {
         return true;
       }),
       setAutoPlay: vi.fn(),
+      setMonoAudio: vi.fn((value: boolean) => { state.monoAudio = value; }),
       setLivePreview: vi.fn((value: boolean) => { state.livePreview = value; }),
       setAnimationMode: vi.fn((value: AnimationMode) => { state.animationMode = value; }),
       setTheme: vi.fn((id: string) => { state.theme = id; }),
@@ -251,6 +254,7 @@ beforeEach(() => {
   state.manualEpgSources = [];
   state.autoPlay = false;
   state.livePreview = false;
+  state.monoAudio = false;
   state.animationMode = 'reduced';
   state.theme = 'midnight';
   state.overlayStyle = 'dark';
@@ -1392,6 +1396,18 @@ describe('Settings.save', () => {
       .toBe('Watch live channels in a small window while you browse.');
     expect(item.querySelector('.toggle-option.active')?.getAttribute('data-value')).toBe('off');
     expect(storageMock.setLivePreview).not.toHaveBeenCalled();
+  });
+
+  it('saves the mono audio toggle on save', () => {
+    state.playlists = [];
+    settings.render();
+    const active = () => container.querySelector('#mono-audio .toggle-option.active')
+      ?.getAttribute('data-value');
+    expect(active()).toBe('off');
+    click('#mono-audio [data-value="on"]');
+    expect(storageMock.setMonoAudio).not.toHaveBeenCalled();
+    click('#save-settings');
+    expect(storageMock.setMonoAudio).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it.each([false, true])('saves live preview from %s without reloading sources', (enabled) => {

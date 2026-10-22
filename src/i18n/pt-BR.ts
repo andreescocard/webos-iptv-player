@@ -367,6 +367,8 @@ export const PT_BR_MESSAGES = {
   'settings.livePreview': 'Prévia ao vivo',
   'settings.livePreviewHint': 'Assista a canais ao vivo em uma janela pequena enquanto navega.',
   'settings.autoPlay': 'Reproduzir o último canal assistido ao iniciar',
+  'settings.monoAudio': 'Áudio mono',
+  'settings.monoAudioHint': 'Reproduz os dois canais em todas as caixas, para equipamentos em que só um lado funciona.',
   'settings.channelCycleMode': 'Canal +/−',
   'settings.channelCycleModeHint': 'Em “Todos os canais”, as teclas Canal +/− percorrem a lista inteira. “Lista de origem” limita a troca de canal ao grupo, aos Favoritos ou à playlist em que a reprodução foi iniciada. Se essa lista ficar vazia, “Todos os canais” será usado automaticamente.',
   'settings.channelCycleGlobal': 'Todos os canais',
