@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyMonoAudio, resetMonoAudioForTests } from './mono-audio';
+import { applyMonoAudio, getMonoAudioStatus, playMonoTest, resetMonoAudioForTests } from './mono-audio';
 
 class FakeNode {
   connections: FakeNode[] = [];
@@ -14,11 +14,35 @@ class FakeNode {
 let contexts: FakeContext[] = [];
 let sources: FakeNode[] = [];
 let failWith: Error | null = null;
+let oscillators: FakeOsc[] = [];
+let mergers: FakeNode[] = [];
+
+class FakeParam {
+  value = 0;
+  setValueAtTime = vi.fn();
+  linearRampToValueAtTime = vi.fn();
+}
+
+class FakeOsc extends FakeNode {
+  frequency = new FakeParam();
+  start = vi.fn();
+  stop = vi.fn();
+}
+
+class FakeGain extends FakeNode {
+  gain = new FakeParam();
+  inputs: [FakeNode, number][] = [];
+  override connect(n: FakeNode, _out?: number, input?: number): void {
+    super.connect(n);
+    if (input !== undefined) (n as FakeGain).inputs.push([this, input]);
+  }
+}
 
 class FakeContext {
   state = 'suspended';
   destination = new FakeNode();
-  gains: FakeNode[] = [];
+  gains: FakeGain[] = [];
+  currentTime = 0;
   resume = vi.fn(() => Promise.resolve());
   constructor() { contexts.push(this); }
   createMediaElementSource(): FakeNode {
@@ -27,8 +51,18 @@ class FakeContext {
     sources.push(n);
     return n;
   }
-  createGain(): FakeNode {
-    const n = new FakeNode();
+  createOscillator(): FakeOsc {
+    const o = new FakeOsc();
+    oscillators.push(o);
+    return o;
+  }
+  createChannelMerger(): FakeGain {
+    const m = new FakeGain();
+    mergers.push(m);
+    return m;
+  }
+  createGain(): FakeGain {
+    const n = new FakeGain();
     this.gains.push(n);
     return n;
   }
@@ -41,6 +75,8 @@ describe('mono audio', () => {
     contexts = [];
     sources = [];
     failWith = null;
+    oscillators = [];
+    mergers = [];
     resetMonoAudioForTests();
     (window as unknown as { AudioContext?: unknown }).AudioContext = FakeContext;
   });
@@ -118,5 +154,84 @@ describe('mono audio', () => {
     const lines = warn.mock.calls.map(c => c.join(' '));
     const hits = lines.filter(l => l.includes('event=audio.mono_unavailable reason=InvalidStateError'));
     expect(hits).toHaveLength(1);
+  });
+
+  describe('getMonoAudioStatus', () => {
+    it('reports off, active, then off again', () => {
+      const v = video();
+      expect(getMonoAudioStatus()).toBe('off');
+      applyMonoAudio(v, true);
+      expect(getMonoAudioStatus()).toBe('active');
+      applyMonoAudio(v, false);
+      expect(getMonoAudioStatus()).toBe('off');
+    });
+
+    it('is unavailable without AudioContext', () => {
+      delete (window as unknown as { AudioContext?: unknown }).AudioContext;
+      expect(getMonoAudioStatus()).toBe('unavailable');
+    });
+
+    it('is unavailable after a Web Audio failure', () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      failWith = new Error('boom');
+      applyMonoAudio(video(), true);
+      expect(getMonoAudioStatus()).toBe('unavailable');
+    });
+  });
+
+  describe('playMonoTest', () => {
+    it('routes through the mono gain when mono is on', () => {
+      playMonoTest(true);
+      const ctx = contexts[0]!;
+      expect(mergers[0]!.connections).toEqual([ctx.gains[0]!]);
+      expect(ctx.gains[0]!.channelCount).toBe(1);
+      expect(ctx.resume).toHaveBeenCalled();
+    });
+
+    it('goes straight to the destination when mono is off', () => {
+      playMonoTest(false);
+      expect(mergers[0]!.connections).toEqual([contexts[0]!.destination]);
+    });
+
+    it('plays low beeps on the left and a high tone on the right', () => {
+      playMonoTest(false);
+      expect(oscillators.map(o => o.frequency.value)).toEqual([400, 400, 400, 1000]);
+      const channels = mergers[0]!.inputs.map(i => i[1]);
+      expect(channels).toEqual([0, 0, 0, 1]);
+      for (const o of oscillators) expect(o.start).toHaveBeenCalledTimes(1);
+    });
+
+    it('never creates a media element source', () => {
+      playMonoTest(true);
+      expect(sources).toHaveLength(0);
+    });
+
+    it('stops the previous run when called again', () => {
+      playMonoTest(false);
+      const first = [...oscillators];
+      const firstMerger = mergers[0]!;
+      playMonoTest(true);
+      for (const o of first) expect(o.stop).toHaveBeenCalledTimes(2);
+      expect(firstMerger.connections).toEqual([]);
+      expect(contexts).toHaveLength(1);
+    });
+
+    it('is a no-op without AudioContext', () => {
+      delete (window as unknown as { AudioContext?: unknown }).AudioContext;
+      expect(() => playMonoTest(true)).not.toThrow();
+      expect(contexts).toHaveLength(0);
+    });
+
+    it('logs the diag event and turns unavailable on failure', () => {
+      const warn = vi.fn();
+      vi.spyOn(console, 'warn').mockImplementation(warn);
+      vi.spyOn(FakeContext.prototype, 'createChannelMerger').mockImplementation(() => {
+        throw Object.assign(new Error('x'), { name: 'NotSupportedError' });
+      });
+      playMonoTest(false);
+      expect(warn.mock.calls.map(c => c.join(' ')).some(l =>
+        l.includes('event=audio.mono_unavailable reason=NotSupportedError'))).toBe(true);
+      expect(getMonoAudioStatus()).toBe('unavailable');
+    });
   });
 });

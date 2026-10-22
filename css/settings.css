@@ -714,6 +714,11 @@
   display: inline-flex;
 }
 
+.mono-test {
+  min-width: 288px;
+  margin-top: 12px;
+}
+
 .settings-item--action .btn {
   min-width: 288px;
 }

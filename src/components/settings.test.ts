@@ -231,6 +231,12 @@ vi.mock('../services/reminder-service', () => ({
     listManageable: vi.fn(() => []),
   },
 }));
+const monoMock = vi.hoisted(() => ({
+  playMonoTest: vi.fn(),
+  getMonoAudioStatus: vi.fn((): 'off' | 'active' | 'unavailable' => 'off'),
+  applyMonoAudio: vi.fn(),
+}));
+vi.mock('./mono-audio', () => monoMock);
 vi.mock('../services/setup-client', () => ({ SetupClient: setupMock }));
 vi.mock('../services/channel-health', () => ({ ChannelHealthService: healthMock }));
 
@@ -1396,6 +1402,33 @@ describe('Settings.save', () => {
       .toBe('Watch live channels in a small window while you browse.');
     expect(item.querySelector('.toggle-option.active')?.getAttribute('data-value')).toBe('off');
     expect(storageMock.setLivePreview).not.toHaveBeenCalled();
+  });
+
+  it('plays the mono test with the unsaved toggle state', () => {
+    state.playlists = [];
+    settings.render();
+    expect(container.querySelector('#mono-test')?.hasAttribute('data-focusable')).toBe(true);
+    click('#mono-test');
+    expect(monoMock.playMonoTest).toHaveBeenLastCalledWith(false);
+    click('#mono-audio [data-value="on"]');
+    click('#mono-test');
+    expect(monoMock.playMonoTest).toHaveBeenLastCalledWith(true);
+    expect(storageMock.setMonoAudio).not.toHaveBeenCalled();
+  });
+
+  it('shows the mono unavailable line only when unavailable', () => {
+    state.playlists = [];
+    settings.render();
+    const status = () => container.querySelector<HTMLElement>('#mono-status')!;
+    expect(status().hidden).toBe(true);
+    expect(status().textContent).toBe('');
+    monoMock.getMonoAudioStatus.mockReturnValue('unavailable');
+    click('#mono-test');
+    expect(status().hidden).toBe(false);
+    expect(status().textContent).toBe('Not available on this TV');
+    settings.render();
+    expect(status().hidden).toBe(false);
+    monoMock.getMonoAudioStatus.mockReturnValue('off');
   });
 
   it('saves the mono audio toggle on save', () => {
