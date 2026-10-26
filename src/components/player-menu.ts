@@ -3,6 +3,7 @@ import { $, html, inShownView, onceTransitionEnd, raw } from '../utils/dom';
 import { morph } from '../utils/morph';
 import { AUDIO_ICON, SPEED_ICON, SUBTITLE_ICON } from './icons';
 import { t } from '../i18n';
+import { getMonoDebug } from './mono-audio';
 import {
   PLAYBACK_RATES,
   type PlaybackRate,
@@ -335,6 +336,7 @@ export class PlayerMenu {
       <div class="menu-header">
         <h2>${t('player.menu')}</h2>
         ${chName ? html`<div class="menu-subtitle">${t('player.playing', { name: chName })}</div>` : ''}
+        <div class="menu-subtitle">${getMonoDebug()}</div>
       </div>
       <div class="menu-items">
         ${rows.map((item) => html`

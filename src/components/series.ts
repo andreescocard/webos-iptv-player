@@ -147,7 +147,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
         const saved = StorageService.getResume(account.id, 'episode', first.id);
         this.handlers.onPlayVod({
           ...this.episodePlayback(series, first),
-          resumeSecs: saved ? saved.position : 0,
+          resumeSecs: saved && !saved.watched ? saved.position : 0,
           episodeQueue: this.episodesAfter(info, first.id, series),
         });
       });
@@ -179,6 +179,16 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     const entry = this.visibleWatchlist('series')
       .find((item) => item.itemId === seriesId);
     return entry ? this.watchlistEntryToSeries(entry) : null;
+  }
+
+  protected heroFromResume(): SeriesItem | null {
+    for (const r of this.resume) {
+      const owner = r.watchlistOwner;
+      if (owner?.kind !== 'series') continue;
+      const found = this.findItem(r.categoryId ?? '', owner.itemId);
+      if (found) return found;
+    }
+    return null;
   }
 
   protected heroFallback(): SeriesItem | null {
@@ -307,7 +317,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     const saved = StorageService.getResume(a.id, 'episode', ep.id);
     this.handlers.onPlayVod({
       ...this.episodePlayback(series, ep),
-      resumeSecs: saved ? saved.position : 0,
+      resumeSecs: saved && !saved.watched ? saved.position : 0,
       episodeQueue: this.episodesAfter(this.currentInfo, ep.id, series),
     });
   }
@@ -354,7 +364,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
   // A still that fails to load leaves the neutral frame and the badge.
   private episodeThumb(ep: Episode, saved: ResumeEntry | null): Safe {
     const duration = saved ? saved.duration || ep.durationSecs : 0;
-    const progress = saved && duration > 0 ? Math.min(100, Math.round((saved.position / duration) * 100)) : 0;
+    const progress = saved?.watched ? 100 : saved && duration > 0 ? Math.min(100, Math.round((saved.position / duration) * 100)) : 0;
     return html`
       <div class="episode-thumb">
         <img class="episode-thumb-img" ${lazySrc(ep.poster)} alt="" onerror="this.style.display='none'">
@@ -376,7 +386,8 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
           <div class="episode-title">
             <span class="episode-num">E${ep.episode}</span>
             <span class="episode-name">${ep.title}</span>
-            ${saved ? html`<span class="episode-resume">${t('common.resume')}</span>` : ''}
+            ${saved?.watched ? html`<span class="episode-resume">${t('epg.watched')}</span>`
+              : saved ? html`<span class="episode-resume">${t('common.resume')}</span>` : ''}
           </div>
           ${mins ? html`<div class="episode-meta">${mins}</div>` : ''}
           ${ep.plot ? html`<p class="episode-plot">${ep.plot}</p>` : ''}

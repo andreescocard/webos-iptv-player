@@ -1,4 +1,14 @@
 import { createLogger } from '../utils/logger';
+import { showToast } from './toast';
+
+let monoDebug = 'mono debug: aguardando (ligue o mono e toque um canal)';
+export function getMonoDebug(): string {
+  return monoDebug;
+}
+function setDebug(msg: string, ms: number): void {
+  monoDebug = msg;
+  showToast(msg, ms);
+}
 
 const log = createLogger('MonoAudio');
 
@@ -83,6 +93,53 @@ export function applyMonoAudio(video: HTMLVideoElement | null, enabled: boolean)
   } catch (e) {
     fail(e);
   }
+  if (enabled) window.setTimeout(() => debugMeasure(current), 3000);
+}
+
+// TEMP debug: taps the source (pre-downmix) for ~2s and toasts per-channel
+// levels. L=R=0 while playing means the TV plays audio outside Web Audio.
+function debugMeasure(video: HTMLVideoElement | null): void {
+  const wiring = video ? wirings.get(video) : undefined;
+  if (!context || !video || !wiring) {
+    setDebug(`mono debug: wired=false failed=${failed}`, 15000);
+    return;
+  }
+  const ctx = context;
+  const splitter = ctx.createChannelSplitter(2);
+  const analysers = [ctx.createAnalyser(), ctx.createAnalyser()];
+  wiring.source.connect(splitter);
+  analysers.forEach((a, i) => {
+    a.fftSize = 2048;
+    splitter.connect(a, i);
+  });
+  const buf = new Float32Array(2048);
+  const peak = [0, 0];
+  let diff = 0;
+  let samples = 0;
+  const timer = window.setInterval(() => {
+    const data: Float32Array[] = [];
+    analysers.forEach((a, i) => {
+      a.getFloatTimeDomainData(buf);
+      let sum = 0;
+      for (let j = 0; j < buf.length; j++) sum += buf[j] * buf[j];
+      peak[i] = Math.max(peak[i], Math.sqrt(sum / buf.length));
+      data.push(buf.slice());
+    });
+    let d = 0;
+    for (let j = 0; j < buf.length; j++) d += Math.abs(data[0][j] - data[1][j]);
+    diff += d / buf.length;
+    samples++;
+  }, 100);
+  window.setTimeout(() => {
+    window.clearInterval(timer);
+    splitter.disconnect();
+    const fmt = (n: number): string => n.toFixed(4);
+    setDebug(
+      `mono debug: ctx=${ctx.state} paused=${video.paused} ` +
+        `L=${fmt(peak[0])} R=${fmt(peak[1])} diffLR=${fmt(diff / Math.max(samples, 1))}`,
+      15000
+    );
+  }, 2000);
 }
 
 export function getMonoAudioStatus(): 'off' | 'active' | 'unavailable' {

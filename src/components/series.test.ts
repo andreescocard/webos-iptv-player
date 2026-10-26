@@ -146,6 +146,17 @@ describe('Series browse + grid', () => {
       expect(handlers.onPlayVod).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'e2', resumeSecs: 300 }));
     });
 
+    it('opens on the last watched series instead of the first listed', async () => {
+      catalogMock.loadSeriesInfo.mockResolvedValue(info());
+      storageMock.getResumeList.mockReturnValue([{
+        accountId: 'x1', kind: 'episode', itemId: 'e2', name: 'Series Two — S1E2', poster: '', ext: 'mkv',
+        position: 300, duration: 600, updatedAt: 1, categoryId: '1', watchlistOwner: { kind: 'series', itemId: 's2' },
+      }]);
+      await openWith([{ id: '1', name: 'Cat A' }], [s1, s2]);
+      expect(title()).toBe('Series Two');
+      expect(container.querySelector('[data-hero-action="play"]')?.textContent).toContain('Resume');
+    });
+
     it('opens the detail when the series has no episodes to play', async () => {
       catalogMock.loadSeriesInfo.mockResolvedValue(info({ seasons: [], episodesBySeason: {} }));
       const { view, handlers } = await openWith([{ id: '1', name: 'Cat A' }], [s1]);

@@ -3,6 +3,7 @@ import { DEFAULT_THEME, DEFAULT_OVERLAY, DEFAULT_TEXT_SIZE, isValidTextSize, typ
 import type { AudioPref, CatchupProgressEntry, Channel, ChannelCustomization, ChannelCycleMode, ManualEpgSource, ParentalControlConfig, ParentalPinThrottle, PlaylistEntry, RecentlyWatchedLiveEntry, Reminder, ResumeEntry, ResumeKind, SubtitlePref, TzMode, WatchlistEntry, WatchlistKind, XtreamLiveCategorySnapshot } from '../types';
 import type { OnlineSubtitleConfig, PickedOnlineSub } from './subtitle-search/types';
 import { channelKey, legacyChannelKey } from '../utils/channel';
+import { extFromUrl } from '../utils/url';
 import { genPlaylistId } from '../utils/playlist';
 import { normalizeXtreamBaseUrl } from '../utils/xtream-url';
 import { createLogger } from '../utils/logger';
@@ -1148,33 +1149,49 @@ export const StorageService = {
     return entry ? cloneValue(entry) : null;
   },
   setResume(entry: ResumeEntry): void {
-    const key = `${entry.accountId}|${entry.kind}|${entry.itemId}`;
-    const finished = entry.duration > 0 && entry.position >= entry.duration - CONFIG.XTREAM.RESUME_FINISH_PAD;
-    if (userData) {
-      if (finished || entry.position < CONFIG.XTREAM.RESUME_MIN_SECS) {
-        delete userData.resume[key];
-        persistUserChanges('playback-progress', [], [resumeKey(entry)]);
-      } else {
-        userData.resume[key] = cloneValue(entry);
-        persistUserChanges('playback-progress', [
-          record(resumeKey(entry), entry, { updatedAt: entry.updatedAt }),
-        ]);
+    const pad = entry.kind === 'episode' ? CONFIG.XTREAM.EPISODE_FINISH_PAD : CONFIG.XTREAM.RESUME_FINISH_PAD;
+    const finished = entry.duration > 0 && entry.position >= entry.duration - pad;
+    if (finished && entry.kind === 'episode') {
+      // A finished episode stays on record as watched, and hands the Continue rail to the next one.
+      this.writeResume({ ...entry, position: entry.duration, watched: true });
+      const next = entry.episodeQueue?.[0];
+      const rest = entry.episodeQueue?.slice(1) ?? [];
+      if (next && !this.getResume(next.accountId, next.kind, next.itemId)) {
+        this.writeResume({
+          accountId: next.accountId, kind: next.kind, itemId: next.itemId,
+          name: next.title, poster: next.poster, ext: extFromUrl(next.url),
+          position: 0, duration: 0, updatedAt: entry.updatedAt,
+          episodeQueue: rest, watchlistOwner: next.watchlistOwner ?? entry.watchlistOwner,
+          categoryId: next.categoryId ?? entry.categoryId,
+        });
       }
       return;
     }
-    const all = get<Record<string, ResumeEntry>>('resume', {});
+    if (entry.kind === 'episode' && this.getResume(entry.accountId, entry.kind, entry.itemId)?.watched
+        && !finished && entry.position < CONFIG.XTREAM.RESUME_MIN_SECS) return;
     if (finished || entry.position < CONFIG.XTREAM.RESUME_MIN_SECS) {
-      delete all[key];
-    } else {
-      all[key] = cloneValue(entry);
+      this.clearResume(entry.accountId, entry.kind, entry.itemId);
+      return;
     }
+    this.writeResume(entry);
+  },
+  writeResume(entry: ResumeEntry): void {
+    if (userData) {
+      userData.resume[`${entry.accountId}|${entry.kind}|${entry.itemId}`] = cloneValue(entry);
+      persistUserChanges('playback-progress', [
+        record(resumeKey(entry), entry, { updatedAt: entry.updatedAt }),
+      ]);
+      return;
+    }
+    const all = get<Record<string, ResumeEntry>>('resume', {});
+    all[`${entry.accountId}|${entry.kind}|${entry.itemId}`] = cloneValue(entry);
     set('resume', all);
   },
   getResumeList(accountId: string): ResumeEntry[] {
     const all = userData ? userData.resume : get<Record<string, ResumeEntry>>('resume', {});
     return Object.keys(all)
       .map((k) => all[k])
-      .filter((e) => e.accountId === accountId)
+      .filter((e) => e.accountId === accountId && !e.watched)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map(cloneValue);
   },

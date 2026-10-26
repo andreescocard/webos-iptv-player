@@ -314,6 +314,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   protected fallbackItem(_id: string): I | null { return null; }
   // Hero when no rail item exists (Movies falls back to a resumed item); default none.
   protected heroFallback(): I | null { return null; }
+  // The most recently watched item, preferred over the first rail item; default none.
+  protected heroFromResume(): I | null { return null; }
   protected itemRating(_item: I): string { return ''; }
   // The hero's extra facts, from the item's detail info (null when it has none).
   protected abstract loadHeroMeta(
@@ -1385,7 +1387,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       this.heroItem = this.heroPending;
       this.heroPending = null;
     }
-    if (!this.heroItem) this.heroItem = this.railGroups[0]?.items[0] ?? this.heroFallback();
+    if (!this.heroItem) this.heroItem = this.heroFromResume() ?? this.railGroups[0]?.items[0] ?? this.heroFallback();
     const continueRail = this.continueRail();
     const watchlistRail = this.watchlistRail();
     const fillNote = this.fillNote();

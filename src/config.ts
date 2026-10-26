@@ -104,6 +104,7 @@ export const CONFIG = {
     RAIL_ITEMS: 20,                      // posters shown per rail before the "all categories" drill-in
     RESUME_MIN_SECS: 15,                 // below this, treat as "start over" (don't store a resume point)
     RESUME_FINISH_PAD: 30,               // within this of the end = finished (clear the resume point)
+    EPISODE_FINISH_PAD: 120,             // an episode this close to the end counts as watched; Continue Watching moves to the next
     ARCHIVE_TTL_MS: 10 * 60 * 1000,      // per-channel get_simple_data_table freshness
     WATCHLIST_MAX_ITEMS: 200,            // per account and content type
     HERO_FOLLOW_DELAY_MS: 500,           // focus rests this long before the browse hero follows it
