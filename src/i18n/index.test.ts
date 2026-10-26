@@ -283,8 +283,6 @@ describe('i18n', () => {
         setLocale(value);
         expect(t('settings.livePreview').length).toBeGreaterThan(0);
         expect(t('settings.livePreviewHint').length).toBeGreaterThan(0);
-        expect(t('settings.monoAudio').length).toBeGreaterThan(0);
-        expect(t('settings.monoAudioHint').length).toBeGreaterThan(0);
         for (const minutes of [0, 1, 2, 25]) {
           const remaining = t('preview.timeLeft', { minutes });
           expect(remaining).toContain(String(minutes));

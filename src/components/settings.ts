@@ -11,7 +11,6 @@ import {
   StorageService,
   XTREAM_CATALOG_REFRESH_HOUR_OPTIONS,
 } from '../services/storage-service';
-import { applyMonoAudio, getMonoAudioStatus, playMonoTest } from './mono-audio';
 import { EpgService } from '../services/epg-service';
 import { ChannelCustomizationService } from '../services/channel-customization';
 import { PlaylistService } from '../services/playlist-service';
@@ -704,8 +703,6 @@ export class Settings {
     this.epgOffsets = { ...this.storedEpgOffsets };
     const epgSources = this.epgSources(manualEpgSources, allPlaylists);
     const autoPlay = StorageService.getAutoPlay();
-    const monoAudio = StorageService.getMonoAudio();
-    const monoUnavailable = getMonoAudioStatus() === 'unavailable';
     const livePreview = StorageService.getLivePreview();
     const channelCycleMode = StorageService.getChannelCycleMode();
     const showHidden = StorageService.getShowHiddenChannels();
@@ -950,13 +947,6 @@ export class Settings {
                 <div class="settings-item">
                   <div class="settings-item-title">${t('settings.autoPlay')}</div>
                   ${toggleGroup('auto-play', [{ value: 'on', label: t('settings.on') }, { value: 'off', label: t('settings.off') }], autoPlay ? 'on' : 'off')}
-                </div>
-                <div class="settings-item">
-                  <div class="settings-item-title">${t('settings.monoAudio')}</div>
-                  ${toggleGroup('mono-audio', [{ value: 'on', label: t('settings.on') }, { value: 'off', label: t('settings.off') }], monoAudio ? 'on' : 'off')}
-                  <div class="settings-item-hint">${t('settings.monoAudioHint')}</div>
-                  <button class="btn btn-secondary mono-test" data-focusable id="mono-test">${t('settings.monoTest')}</button>
-                  <div class="settings-item-hint" id="mono-status" ${monoUnavailable ? raw('') : raw('hidden')}>${monoUnavailable ? t('settings.monoUnavailable') : ''}</div>
                 </div>
                 <div class="settings-item">
                   <div class="settings-item-title">${t('settings.livePreview')}</div>
@@ -1440,16 +1430,6 @@ export class Settings {
     return true;
   }
 
-  private playMonoTest(): void {
-    const active = $('#mono-audio .toggle-option.active', this.container);
-    playMonoTest(active?.dataset.value === 'on');
-    const status = $('#mono-status', this.container);
-    if (!status) return;
-    const unavailable = getMonoAudioStatus() === 'unavailable';
-    status.hidden = !unavailable;
-    status.textContent = unavailable ? t('settings.monoUnavailable') : '';
-  }
-
   focusReminderEntry(): void {
     const entry = $('#manage-reminders', this.container);
     if (!entry) return;
@@ -1546,8 +1526,6 @@ export class Settings {
       this.toggleChannelHealthPause();
     } else if (el.id === 'cancel-channel-health') {
       this.cancelChannelHealthCheck();
-    } else if (el.id === 'mono-test') {
-      this.playMonoTest();
     } else if (el.id === 'manage-reminders') {
       this.onManageReminders();
     } else if (el.id === 'manage-parental-controls') {
@@ -2823,13 +2801,6 @@ export class Settings {
 
     const autoPlayBtn = $('#auto-play .toggle-option.active', this.container);
     if (autoPlayBtn) StorageService.setAutoPlay(autoPlayBtn.dataset.value === 'on');
-
-    const monoAudioBtn = $('#mono-audio .toggle-option.active', this.container);
-    if (monoAudioBtn) {
-      const mono = monoAudioBtn.dataset.value === 'on';
-      StorageService.setMonoAudio(mono);
-      applyMonoAudio(null, mono);
-    }
 
     const livePreviewBtn = $('#live-preview-setting .toggle-option.active', this.container);
     if (livePreviewBtn) StorageService.setLivePreview(livePreviewBtn.dataset.value === 'on');

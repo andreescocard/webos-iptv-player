@@ -140,15 +140,6 @@ describe('StorageService', () => {
     StorageService.setPlaylistsReplacedHandler(() => {});
   });
 
-  it('stores mono audio off by default and persists it', () => {
-    expect(StorageService.getMonoAudio()).toBe(false);
-    StorageService.setMonoAudio(true);
-    expect(localStorage.getItem('iptv_mono_audio')).toBe('true');
-    expect(StorageService.getMonoAudio()).toBe(true);
-    StorageService.setMonoAudio(false);
-    expect(StorageService.getMonoAudio()).toBe(false);
-  });
-
   it('persists live preview on and off independently from autoplay and sources', () => {
     StorageService.setAutoPlay(true);
     StorageService.setPlaylists([{ id: 'p1', name: 'P1', url: 'http://host/a' }]);

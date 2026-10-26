@@ -46,7 +46,6 @@ import {
   type PlayerOsdSnapshot,
   type PlayerOsdStreamInfo,
 } from './player-osd';
-import { applyMonoAudio } from './mono-audio';
 import { PlayerTracks } from './player-tracks';
 
 const log = createLogger('Player');
@@ -229,7 +228,6 @@ export class Player {
     this.pendingSeekTarget = null;
     this.pipeline.setVideoElement(videoEl);
     this.bindVideoEvents(videoEl);
-    applyMonoAudio(videoEl, StorageService.getMonoAudio());
 
     // Suspend/resume playback when the app is actually backgrounded so the
     // native media pipeline (a separate process) stops pulling segments off the
@@ -442,7 +440,6 @@ export class Player {
     old.parentNode!.replaceChild(fresh, old);
     this.videoEl = fresh;
     this.pipeline.setVideoElement(fresh);
-    applyMonoAudio(fresh, StorageService.getMonoAudio());
     this.onPlaybackStateChanged();
   }
 

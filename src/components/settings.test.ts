@@ -32,7 +32,6 @@ const {
     }[],
     manualEpgSources: [] as ManualEpgSource[],
     autoPlay: false,
-    monoAudio: false,
     livePreview: false,
     animationMode: 'reduced' as AnimationMode,
     theme: 'midnight' as string,
@@ -87,7 +86,6 @@ const {
         playlistIds: source.playlistIds.slice(),
       }))),
       getAutoPlay: vi.fn(() => state.autoPlay),
-      getMonoAudio: vi.fn(() => state.monoAudio),
       getLivePreview: vi.fn(() => state.livePreview),
       getAnimationMode: vi.fn(() => state.animationMode),
       getTheme: vi.fn(() => state.theme),
@@ -124,7 +122,6 @@ const {
         return true;
       }),
       setAutoPlay: vi.fn(),
-      setMonoAudio: vi.fn((value: boolean) => { state.monoAudio = value; }),
       setLivePreview: vi.fn((value: boolean) => { state.livePreview = value; }),
       setAnimationMode: vi.fn((value: AnimationMode) => { state.animationMode = value; }),
       setTheme: vi.fn((id: string) => { state.theme = id; }),
@@ -231,12 +228,6 @@ vi.mock('../services/reminder-service', () => ({
     listManageable: vi.fn(() => []),
   },
 }));
-const monoMock = vi.hoisted(() => ({
-  playMonoTest: vi.fn(),
-  getMonoAudioStatus: vi.fn((): 'off' | 'active' | 'unavailable' => 'off'),
-  applyMonoAudio: vi.fn(),
-}));
-vi.mock('./mono-audio', () => monoMock);
 vi.mock('../services/setup-client', () => ({ SetupClient: setupMock }));
 vi.mock('../services/channel-health', () => ({ ChannelHealthService: healthMock }));
 
@@ -260,7 +251,6 @@ beforeEach(() => {
   state.manualEpgSources = [];
   state.autoPlay = false;
   state.livePreview = false;
-  state.monoAudio = false;
   state.animationMode = 'reduced';
   state.theme = 'midnight';
   state.overlayStyle = 'dark';
@@ -1402,45 +1392,6 @@ describe('Settings.save', () => {
       .toBe('Watch live channels in a small window while you browse.');
     expect(item.querySelector('.toggle-option.active')?.getAttribute('data-value')).toBe('off');
     expect(storageMock.setLivePreview).not.toHaveBeenCalled();
-  });
-
-  it('plays the mono test with the unsaved toggle state', () => {
-    state.playlists = [];
-    settings.render();
-    expect(container.querySelector('#mono-test')?.hasAttribute('data-focusable')).toBe(true);
-    click('#mono-test');
-    expect(monoMock.playMonoTest).toHaveBeenLastCalledWith(false);
-    click('#mono-audio [data-value="on"]');
-    click('#mono-test');
-    expect(monoMock.playMonoTest).toHaveBeenLastCalledWith(true);
-    expect(storageMock.setMonoAudio).not.toHaveBeenCalled();
-  });
-
-  it('shows the mono unavailable line only when unavailable', () => {
-    state.playlists = [];
-    settings.render();
-    const status = () => container.querySelector<HTMLElement>('#mono-status')!;
-    expect(status().hidden).toBe(true);
-    expect(status().textContent).toBe('');
-    monoMock.getMonoAudioStatus.mockReturnValue('unavailable');
-    click('#mono-test');
-    expect(status().hidden).toBe(false);
-    expect(status().textContent).toBe('Not available on this TV');
-    settings.render();
-    expect(status().hidden).toBe(false);
-    monoMock.getMonoAudioStatus.mockReturnValue('off');
-  });
-
-  it('saves the mono audio toggle on save', () => {
-    state.playlists = [];
-    settings.render();
-    const active = () => container.querySelector('#mono-audio .toggle-option.active')
-      ?.getAttribute('data-value');
-    expect(active()).toBe('off');
-    click('#mono-audio [data-value="on"]');
-    expect(storageMock.setMonoAudio).not.toHaveBeenCalled();
-    click('#save-settings');
-    expect(storageMock.setMonoAudio).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it.each([false, true])('saves live preview from %s without reloading sources', (enabled) => {

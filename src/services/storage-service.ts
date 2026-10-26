@@ -990,12 +990,6 @@ export const StorageService = {
     set('auto_play', val);
   },
 
-  getMonoAudio(): boolean {
-    return get<boolean>('mono_audio', false) === true;
-  },
-  setMonoAudio(val: boolean): void {
-    set('mono_audio', val);
-  },
 
   getLivePreview(): boolean {
     return get<unknown>('live_preview', false) === true;

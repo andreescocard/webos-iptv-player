@@ -47,7 +47,6 @@ vi.mock('../services/storage-service', () => ({
     setCatchupProgress: vi.fn(), setResume: vi.fn(),
     touchRecentlyWatchedLive: vi.fn(),
     getChannelCycleMode: vi.fn(() => 'global'),
-    getMonoAudio: vi.fn(() => false),
     getLiveReconnectAttempts: vi.fn(() => 3),
   },
 }));
