@@ -118,6 +118,57 @@ describe('Series browse + grid', () => {
       expect(container.querySelector('.catalog-hero-plot')?.textContent).toBe('A series plot.');
     });
 
+    describe('Continue Watching episode', () => {
+      const entry = (extra: Record<string, unknown> = {}) => ({
+        accountId: 'x1', kind: 'episode', itemId: 'e2', name: 'Series Two — S2E5 — Episode Five',
+        poster: 'http://host/still.jpg', ext: 'mkv', position: 300, duration: 600, updatedAt: 1,
+        categoryId: '1', watchlistOwner: { kind: 'series', itemId: 's2' }, ...extra,
+      });
+
+      it('shows the series, the episode and its still in the hero when focused', async () => {
+        storageMock.getResumeList.mockReturnValue([entry()]);
+        catalogMock.loadSeriesInfo.mockResolvedValue(info({ backdrop: 'http://host/w2.jpg' }));
+        await openWith([{ id: '1', name: 'Cat A' }], [s1, s2]);
+        await settle();
+        hover('.catalog-tile[data-resume-episode="e2"]');
+        vi.advanceTimersByTime(500);
+        await settle();
+        expect(title()).toBe('Series Two');
+        expect(container.querySelector('.catalog-hero-episode-name')?.textContent).toBe('S2E5 · Episode Five');
+        expect(container.querySelector<HTMLElement>('.catalog-hero-episode-progress .episode-progress-fill')?.style.width).toBe('50%');
+        expect(container.querySelector('.catalog-hero-backdrop')?.getAttribute('src')).toBe('http://host/still.jpg');
+      });
+
+      it('falls back to the series art when the episode has no still of its own', async () => {
+        storageMock.getResumeList.mockReturnValue([entry({ poster: 'http://host/a2.jpg' })]);
+        catalogMock.loadSeriesInfo.mockResolvedValue(info({ backdrop: 'http://host/w2.jpg' }));
+        await openWith([{ id: '1', name: 'Cat A' }], [s1, s2]);
+        await settle();
+        hover('.catalog-tile[data-resume-episode="e2"]');
+        vi.advanceTimersByTime(500);
+        await settle();
+        expect(title()).toBe('Series Two');
+        expect(container.querySelector('.catalog-hero-backdrop')?.getAttribute('src')).toBe('http://host/w2.jpg');
+      });
+
+      it('splits the card into series and episode lines with a progress bar', async () => {
+        storageMock.getResumeList.mockReturnValue([entry()]);
+        catalogMock.loadSeriesInfo.mockResolvedValue(info());
+        await openWith([{ id: '1', name: 'Cat A' }], [s1, s2]);
+        const tile = container.querySelector('.catalog-tile[data-resume-episode="e2"]')!;
+        expect(tile.querySelector('.catalog-tile-name')?.textContent).toBe('Series Two');
+        expect(tile.querySelector('.catalog-tile-episode')?.textContent).toBe('S2E5 · Episode Five');
+        expect(tile.querySelector<HTMLElement>('.catalog-tile-progress-fill')?.style.width).toBe('50%');
+      });
+
+      it('draws no progress bar for a next episode not started yet', async () => {
+        storageMock.getResumeList.mockReturnValue([entry({ position: 0, duration: 0 })]);
+        catalogMock.loadSeriesInfo.mockResolvedValue(info());
+        await openWith([{ id: '1', name: 'Cat A' }], [s1, s2]);
+        expect(container.querySelector('.catalog-tile[data-resume-episode="e2"] .catalog-tile-progress')).toBeNull();
+      });
+    });
+
     it('plays the first episode when nothing was started', async () => {
       catalogMock.loadSeriesInfo.mockResolvedValue(info());
       const { view, handlers } = await openWith([{ id: '1', name: 'Cat A' }], [s1]);

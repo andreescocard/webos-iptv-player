@@ -209,6 +209,9 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   // The item the browse hero shows, and the one it follows once focus rests.
   private heroItem: I | null = null;
   private heroPending: I | null = null;
+  // The Continue entry the hero was raised for, so it can show that episode.
+  protected heroResume: ResumeEntry | null = null;
+  private heroPendingResume: ResumeEntry | null = null;
   private heroTimer: ReturnType<typeof setTimeout> | null = null;
   private heroController: AbortController | null = null;
   private heroFetchKey = '';
@@ -316,6 +319,12 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   protected heroFallback(): I | null { return null; }
   // The most recently watched item, preferred over the first rail item; default none.
   protected heroFromResume(): I | null { return null; }
+  // The item a Continue tile raises in the hero; default none.
+  protected resumeHeroItem(_entry: ResumeEntry): I | null { return null; }
+  // Extra hero line for the focused Continue entry (e.g. the episode); default none.
+  protected heroResumeNote(_item: I, _entry: ResumeEntry): Safe | '' { return ''; }
+  // Landscape artwork the Continue entry brings itself (an episode still), else ''.
+  protected heroResumeArt(_item: I, _entry: ResumeEntry): string { return ''; }
   protected itemRating(_item: I): string { return ''; }
   // The hero's extra facts, from the item's detail info (null when it has none).
   protected abstract loadHeroMeta(
@@ -766,6 +775,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.gridCategory = null;
     this.heroItem = null;
     this.heroPending = null;
+    this.heroResume = null;
+    this.heroPendingResume = null;
     this.heroReturnKey = null;
     this.gridVirtualizer.setScrollOffset(0);
     this.resume = this.visibleResume(account.id);
@@ -1019,6 +1030,12 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       return;
     }
     this.heroReturnKey = this.keyFor(el);
+    if (el.dataset.resumeEpisode !== undefined) {
+      const entry = this.resume.find(r => r.itemId === el.dataset.resumeEpisode);
+      const owner = entry ? this.resumeHeroItem(entry) : null;
+      if (entry && owner) this.followHero(owner, entry);
+      return;
+    }
     const id = el.dataset.itemId;
     if (id === undefined || el.closest('[data-category-virtual-index]')) return;
     const item = this.findItem(el.dataset.categoryId ?? '', id);
@@ -1088,13 +1105,16 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
 
   // Fast D-pad travel across a rail must not swap artwork and fetch details
   // for every tile it passes, so the hero follows only once focus rests.
-  private followHero(item: I): void {
+  private followHero(item: I, resume: ResumeEntry | null = null): void {
     this.cancelHeroTimer();
-    if (this.heroItem && this.itemId(this.heroItem) === this.itemId(item)) {
+    if (this.heroItem && this.itemId(this.heroItem) === this.itemId(item)
+      && (this.heroResume?.itemId ?? '') === (resume?.itemId ?? '')) {
       this.heroPending = null;
+      this.heroPendingResume = null;
       return;
     }
     this.heroPending = item;
+    this.heroPendingResume = resume;
     this.heroTimer = setTimeout(() => {
       this.heroTimer = null;
       this.flushHero();
@@ -1105,8 +1125,11 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.cancelHeroTimer();
     const item = this.heroPending;
     this.heroPending = null;
+    const resume = this.heroPendingResume;
+    this.heroPendingResume = null;
     if (!item) return;
     this.heroItem = item;
+    this.heroResume = resume;
     this.renderHero();
     this.fetchHeroMeta(item);
   }
@@ -1160,7 +1183,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   private heroArt(): Safe {
     const item = this.heroItem;
     const meta = item ? this.heroMetaCache.get(this.heroMetaKey(item)) : undefined;
-    const backdrop = meta?.backdrop ?? '';
+    const still = item && this.heroResume ? this.heroResumeArt(item, this.heroResume) : '';
+    const backdrop = still || meta?.backdrop || '';
     const poster = item ? this.itemPoster(item) : '';
     const scrim = html`<div class="catalog-hero-scrim" data-key="scrim"></div>`;
     if (backdrop) {
@@ -1194,6 +1218,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     return html`
       <div class="catalog-hero-text" data-key="hero-text">
         <h1 class="catalog-hero-title" data-key="hero-title">${item ? this.itemName(item) : this.kicker}</h1>
+        ${item && this.heroResume ? this.heroResumeNote(item, this.heroResume) : ''}
         ${facts.length ? html`<div class="catalog-hero-meta" data-key="hero-meta">${catalogFacts(facts)}</div>` : ''}
         ${meta?.plot ? html`<p class="catalog-hero-plot" data-key="hero-plot">${meta.plot}</p>` : ''}
         ${item ? html`
@@ -1307,14 +1332,22 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     else if (this.mode === 'grid') this.renderGrid(false);
   }
 
-  protected tile(item: I): Safe {
+  // Thin watched-progress bar over the foot of a Continue card; none until started.
+  protected progressBar(r: { position: number; duration: number }): Safe | '' {
+    const pct = r.duration > 0 ? Math.min(100, Math.round((r.position / r.duration) * 100)) : 0;
+    return pct > 0
+      ? html`<div class="catalog-tile-progress"><div class="catalog-tile-progress-fill" style="width:${pct}%"></div></div>`
+      : '';
+  }
+
+  protected tile(item: I, progress: Safe | '' = ''): Safe {
     const id = this.itemId(item);
     const cat = this.itemCategoryId(item);
     return html`
       <div class="catalog-tile" data-focusable data-key="i:${cat}:${id}"
            data-item-id="${id}" data-category-id="${cat}">
         <div class="catalog-poster-wrap">${this.posterCell(this.itemName(item), this.itemPoster(item))}${
-          this.itemLockBadge(cat, id)}</div>
+          this.itemLockBadge(cat, id)}${progress}</div>
         <div class="catalog-tile-name">${this.itemName(item)}</div>
       </div>
     `;
@@ -1385,7 +1418,9 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.resume = this.visibleResume(this.account!.id);
     if (this.heroPending && this.heroTimer === null) {
       this.heroItem = this.heroPending;
+      this.heroResume = this.heroPendingResume;
       this.heroPending = null;
+      this.heroPendingResume = null;
     }
     if (!this.heroItem) this.heroItem = this.heroFromResume() ?? this.railGroups[0]?.items[0] ?? this.heroFallback();
     const continueRail = this.continueRail();

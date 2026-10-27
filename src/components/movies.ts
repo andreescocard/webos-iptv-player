@@ -135,7 +135,7 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
 
   protected continueRail(): Safe | '' {
     return this.resume.length
-      ? this.rail('continue', t('catalog.continueWatching'), this.resume.map((r) => this.tile(this.resumeToVod(r.itemId)!)))
+      ? this.rail('continue', t('catalog.continueWatching'), this.resume.map((r) => this.tile(this.resumeToVod(r.itemId)!, this.progressBar(r))))
       : '';
   }
 

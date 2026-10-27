@@ -88,6 +88,9 @@ html[data-animation="essential"] .catalog-hero-art { animation: none; }
   margin: 16px 0 0; font-size: 24px; line-height: 1.45; color: var(--text-primary);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
 }
+.catalog-hero-episode { margin-top: 12px; max-width: 640px; }
+.catalog-hero-episode-name { font-size: 28px; font-weight: 600; color: var(--text-primary); }
+.catalog-hero-episode-progress { position: relative; margin-top: 12px; border-radius: 3px; overflow: hidden; }
 .catalog-hero-actions { display: flex; gap: 16px; margin-top: 24px; }
 .catalog-fill {
   margin-top: 16px; font-size: 22px; color: var(--text-secondary);
@@ -129,6 +132,15 @@ html[data-animation="essential"] .catalog-hero-art { animation: none; }
 .catalog-poster-empty { display: flex; align-items: center; justify-content: center; font-size: 72px; color: var(--text-secondary); }
 .catalog-tile-name {
   margin-top: 10px; font-size: 22px; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.catalog-tile-progress {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 6px;
+  background: rgba(255, 255, 255, 0.3);
+}
+.catalog-tile-progress-fill { height: 100%; background: var(--accent, #3ea6ff); }
+.catalog-tile-episode {
+  margin-top: 2px; font-size: 20px; color: var(--text-secondary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .catalog-tile.focused {

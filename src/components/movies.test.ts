@@ -314,6 +314,15 @@ describe('Movies browse + grid', () => {
     expect(container.textContent).toContain('Continue Watching');
   });
 
+  it('draws a progress bar on a Continue card, sized to the watched share', async () => {
+    const { StorageService } = await import('../services/storage-service');
+    (StorageService.getResumeList as ReturnType<typeof vi.fn>).mockReturnValue([
+      { accountId: 'x1', kind: 'vod', itemId: '10', name: 'Movie One', poster: '', ext: 'mp4', position: 3000, duration: 6000, updatedAt: 1 },
+    ]);
+    await openWith();
+    expect(container.querySelector<HTMLElement>('.catalog-tile-progress-fill')?.style.width).toBe('50%');
+  });
+
   it('shows a Watchlist rail from stored movie snapshots', async () => {
     watchlistState.entries = [{
       accountId: 'x1', kind: 'vod', itemId: '42', name: 'Saved Movie', poster: '',

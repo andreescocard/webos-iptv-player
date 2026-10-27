@@ -29,6 +29,16 @@ function seriesMinutes(info: SeriesInfo): string {
   return info.episodeRunTimeMins > 0 ? t('catalog.minutes', { count: info.episodeRunTimeMins }) : '';
 }
 
+// Resume names are composed as "<Series> — S2E5 — <Title>" (see episodeLabel).
+function parseEpisodeName(name: string): { series: string; code: string; title: string } {
+  const m = /^(.*?) [—-] (S\d+E\d+)(?: [—-] (.*))?$/.exec(name);
+  return m ? { series: m[1], code: m[2], title: m[3] ?? '' } : { series: name, code: '', title: '' };
+}
+
+function episodeLine(p: { code: string; title: string }): string {
+  return p.code ? (p.title ? `${p.code} · ${p.title}` : p.code) : '';
+}
+
 export class Series extends CatalogView<SeriesCategory, SeriesItem> {
   protected get kicker(): string { return t('common.series'); }
   protected readonly resumeKind: ResumeKind = 'episode';
@@ -115,6 +125,8 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
 
   // The most recent episode of this series left part-watched, if any.
   private resumeFor(series: SeriesItem): ResumeEntry | null {
+    const focused = this.heroResume;
+    if (focused?.watchlistOwner?.itemId === series.seriesId) return focused;
     return this.resume.find((r) => r.watchlistOwner?.kind === 'series'
       && r.watchlistOwner.itemId === series.seriesId) ?? null;
   }
@@ -350,12 +362,45 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     });
   }
 
+  protected resumeHeroItem(r: ResumeEntry): SeriesItem | null {
+    const ownerId = r.watchlistOwner?.itemId;
+    if (!ownerId) return null;
+    return this.findItem(r.categoryId ?? '', ownerId) ?? {
+      accountId: r.accountId,
+      seriesId: ownerId,
+      name: parseEpisodeName(r.name).series,
+      poster: '',
+      rating: '',
+      categoryId: r.categoryId ?? '',
+    };
+  }
+
+  // A resumed episode's own still when it has one; otherwise the series art.
+  protected heroResumeArt(series: SeriesItem, r: ResumeEntry): string {
+    return r.poster && r.poster !== series.poster ? r.poster : '';
+  }
+
+  protected heroResumeNote(_series: SeriesItem, r: ResumeEntry): Safe | '' {
+    const label = episodeLine(parseEpisodeName(r.name));
+    if (!label) return '';
+    const pct = r.duration > 0 ? Math.min(100, Math.round((r.position / r.duration) * 100)) : 0;
+    return html`
+      <div class="catalog-hero-episode" data-key="hero-episode">
+        <div class="catalog-hero-episode-name">${label}</div>
+        ${pct > 0 ? html`<div class="episode-progress catalog-hero-episode-progress"><div class="episode-progress-fill" style="width:${pct}%"></div></div>` : ''}
+      </div>`;
+  }
+
   private resumeTile(r: ResumeEntry): Safe {
+    const parsed = parseEpisodeName(r.name);
+    const label = episodeLine(parsed);
     return html`
       <div class="catalog-tile" data-focusable data-key="r:${r.itemId}" data-resume-episode="${r.itemId}">
         <div class="catalog-poster-wrap">${this.posterCell(r.name, r.poster)}${
-          this.itemLockBadge(r.categoryId ?? '', r.watchlistOwner?.itemId ?? r.itemId)}</div>
-        <div class="catalog-tile-name">${r.name}</div>
+          this.itemLockBadge(r.categoryId ?? '', r.watchlistOwner?.itemId ?? r.itemId)}${this.progressBar(r)}</div>
+        ${label
+          ? html`<div class="catalog-tile-name">${parsed.series}</div><div class="catalog-tile-episode">${label}</div>`
+          : html`<div class="catalog-tile-name">${r.name}</div>`}
       </div>
     `;
   }
