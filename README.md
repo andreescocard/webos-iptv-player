@@ -64,7 +64,7 @@
 - **Reminders** — flag an upcoming program and get notified at air time, even with the app closed, to tune straight in
 - **Recently Watched** — return to recent live channels or resume partially watched catch-up programs
 - **Live preview** — keep live playback beside the channel list while browsing, with program info and quick controls
-- **Movies & Series** — browse an Xtream account's VOD catalogs, with Continue Watching and account-scoped Watchlist rails
+- **Movies & Series** — browse an Xtream account's VOD catalogs, with Continue Watching (one card per series, moving on to the next episode) and account-scoped Watchlist rails
 - **Automatic VOD queues** — continue through series episodes or remaining Watchlist movies, removing completed titles from the Watchlist
 - **Catch-up & Live DVR** — replay past programs, and pause / rewind / return to the live edge on live streams
 - **Parental controls** — lock Live TV groups, movie and series categories, or individual titles with a PIN, with adult groups suggested for locking; locked content can stay listed with a lock or be hidden, and you choose when the PIN is asked again

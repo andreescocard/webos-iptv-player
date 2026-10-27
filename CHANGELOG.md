@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.18.0 — 2026-10-26
+
+### Added
+
+- Continue Watching cards show a progress bar.
+- Focusing an episode in Continue Watching shows its series, episode, and
+  still in the banner.
+
+### Changed
+
+- An episode counts as watched in its last 2 minutes, and Continue
+  Watching moves on to the next one.
+- Continue Watching keeps one card per series, and earlier episodes are
+  marked watched.
+- Episode cards show the series on one line and the episode on another,
+  without repeating the series name.
+
+### Fixed
+
+- Progress is saved while you watch and when you leave the app, not
+  only when you press Back.
+- An episode that plays to the end, or fails during the credits, now
+  counts as watched.
+
 ## 1.17.0 — 2026-10-26
 
 ### Added
