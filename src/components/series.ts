@@ -272,6 +272,46 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     this.renderDetail();
   }
 
+  // Back from the player on a finished episode: focus moves on to the one the
+  // series now continues with, in its own season.
+  protected refreshDetailPlayback(): void {
+    const a = this.account;
+    const series = this.currentSeries;
+    const info = this.currentInfo;
+    const key = this.focusedKey();
+    const focused = key?.startsWith('ep:') ? key.slice(3) : null;
+    const next = a && series && info && focused !== null
+      && StorageService.getResume(a.id, 'episode', focused)?.watched
+      ? StorageService.getResumeList(a.id).find((r) => r.kind === 'episode'
+        && r.watchlistOwner?.kind === 'series' && r.watchlistOwner.itemId === series.seriesId)
+      : undefined;
+    const season = next && info
+      ? info.seasons.find((n) => (info.episodesBySeason[n] ?? []).some((ep) => ep.id === next.itemId))
+      : undefined;
+    if (!next || season === undefined) {
+      this.renderDetail();
+      return;
+    }
+    if (season !== this.selectedSeason) {
+      this.selectedSeason = season;
+      this.episodeSource = null;
+      this.episodeVirtualizer.setScrollOffset(0);
+      // Sizes the new season's list before it is scrolled.
+      this.renderDetail(false);
+    }
+    const index = this.selectedEpisodes().findIndex((ep) => ep.id === next.itemId);
+    const list = this.layer('detail').querySelector<HTMLElement>('.series-detail');
+    this.episodeFocusIndex = index;
+    this.episodeVirtualizer.ensureVisible(index, list?.clientHeight || EPISODE_VIEWPORT_FALLBACK);
+    this.renderDetail(false);
+    this.place(
+      this.layer('detail').querySelector<HTMLElement>(
+        `[data-episode-index="${index}"] [data-focusable]`,
+      ),
+      this.placementVia(),
+    );
+  }
+
   private findEpisode(episodeId: string): Episode | null {
     const info = this.currentInfo;
     if (!info) return null;

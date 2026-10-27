@@ -173,6 +173,36 @@ describe('Series browse + grid', () => {
         expect(container.querySelector('.catalog-hero-episode-name')?.textContent).toBe('S2E5 · Episode Five');
       });
 
+      it('moves the hero and the focus on to the next episode once the resumed one finishes', async () => {
+        const queued = { url: 'http://host:8080/series/u/p/e3.mkv', title: 'Series Two — S2E6 — Episode Six',
+          poster: '', accountId: 'x1', itemId: 'e3', kind: 'episode', categoryId: '1',
+          watchlistOwner: { kind: 'series', itemId: 's2' } };
+        storageMock.getResumeList.mockReturnValue([entry({ episodeQueue: [queued] })]);
+        catalogMock.loadSeriesInfo.mockResolvedValue(info());
+        const { view, handlers } = await openWith([{ id: '1', name: 'Cat A' }], [s1, s2]);
+        await settle();
+        hover('.catalog-tile[data-resume-episode="e2"]');
+        vi.advanceTimersByTime(500);
+        await settle();
+        view.handleAction('select');
+        expect(handlers.onPlayVod).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 'e2' }));
+
+        // The player finished e2, and storage handed the series on to e3.
+        storageMock.getResumeList.mockReturnValue([entry({
+          itemId: 'e3', name: 'Series Two — S2E6 — Episode Six', poster: '', position: 0, duration: 0, updatedAt: 2,
+        })]);
+        view.refreshPlaybackState();
+        await settle();
+        Focus.flush();
+        expect(container.querySelector('.catalog-tile[data-resume-episode="e2"]')).toBeNull();
+        expect(container.querySelector('.focused')?.getAttribute('data-resume-episode')).toBe('e3');
+        expect(container.querySelector('.catalog-hero-episode-name')?.textContent).toBe('S2E6 · Episode Six');
+        hover('[data-hero-action="play"]');
+        view.handleAction('select');
+        await settle();
+        expect(handlers.onPlayVod).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 'e3', resumeSecs: 0 }));
+      });
+
       it('draws no progress bar for a next episode not started yet', async () => {
         storageMock.getResumeList.mockReturnValue([entry({ position: 0, duration: 0 })]);
         catalogMock.loadSeriesInfo.mockResolvedValue(info());
@@ -657,6 +687,62 @@ describe('Series detail', () => {
     view.handleAction('select');
     expect(container.querySelector('[data-action="watchlist"]')?.textContent).toContain('Add to Watchlist');
     expect(toastMock.showToast).toHaveBeenLastCalledWith('Removed from Watchlist');
+  });
+
+  it('moves Right from a wide Watchlist button to Trailer, not to a season below', async () => {
+    catalogMock.loadSeriesInfo.mockResolvedValue(SERIES_INFO);
+    const { view } = await openWith();
+    await openDetail(view);
+    // A long label puts Watchlist's center past Season 2's, which sits just below.
+    const boxes: Record<string, [number, number, number, number]> = {
+      watchlist: [0, 400, 400, 460], trailer: [412, 400, 612, 460],
+      'season:1': [0, 492, 160, 552], 'season:2': [172, 492, 332, 552],
+    };
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const [left, top, right, bottom] = boxes[this.getAttribute('data-key') ?? ''] ?? [0, 700, 900, 800];
+      return { x: left, y: top, left, top, right, bottom, width: right - left, height: bottom - top,
+        toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      document.documentElement.classList.add('keyboard-nav');
+      container.querySelector('[data-action="watchlist"]')!
+        .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+      view.handleAction('right');
+      Focus.flush();
+      expect(container.querySelector('.focused')?.getAttribute('data-key')).toBe('trailer');
+      view.handleAction('right');
+      Focus.flush();
+      expect(container.querySelector('.focused')?.getAttribute('data-key')).toBe('trailer');
+      view.handleAction('left');
+      Focus.flush();
+      expect(container.querySelector('.focused')?.getAttribute('data-key')).toBe('watchlist');
+    } finally {
+      rect.mockRestore();
+      document.documentElement.classList.remove('keyboard-nav');
+    }
+  });
+
+  it('moves the focus from a finished episode to the next one, in its own season', async () => {
+    catalogMock.loadSeriesInfo.mockResolvedValue(SERIES_INFO);
+    const { view, handlers } = await openWith();
+    await openDetail(view);
+    container.querySelector('.episode-row[data-episode-id="e1"]')!
+      .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+    view.handleAction('select');
+    expect(handlers.onPlayVod).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 'e1' }));
+
+    storageMock.getResume.mockImplementation(((_a: string, _k: string, id: string) => (id === 'e1'
+      ? { accountId: 'x1', kind: 'episode', itemId: 'e1', name: 'Series One — S1E1', poster: '', ext: 'mp4',
+        position: 1500, duration: 1500, updatedAt: 2, watched: true }
+      : null)) as never);
+    storageMock.getResumeList.mockReturnValue([{
+      accountId: 'x1', kind: 'episode', itemId: 'e2', name: 'Series One — S2E1', poster: '', ext: 'mkv',
+      position: 0, duration: 0, updatedAt: 2, watchlistOwner: { kind: 'series', itemId: 's1' },
+    }]);
+    view.refreshPlaybackState();
+    Focus.flush();
+    expect(container.querySelector('.series-season-btn.active')?.getAttribute('data-season')).toBe('2');
+    expect(container.querySelector('.focused')?.getAttribute('data-episode-id')).toBe('e2');
   });
 
   it('renders a season selector and the first season\'s episodes, and plays from the start', async () => {

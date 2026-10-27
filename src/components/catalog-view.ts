@@ -354,6 +354,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     const trailer = item ? this.trailerAction(item) : null;
     return trailer ? [trailer] : [];
   }
+  protected refreshDetailPlayback(): void { this.renderDetail(); }
   // The item the open detail screen shows.
   protected detailItem(): I | null { return null; }
   // What a trailer lookup needs for this item; null hides the Trailer button.
@@ -624,7 +625,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   // How a render that settles focus on its own asks for it: in keys mode it
   // may bring it into view, otherwise it lights it where it is. Under a
   // surface that owns the keys it only follows the focus.
-  private placementVia(): Via | null {
+  protected placementVia(): Via | null {
     if (Focus.owner() !== this.focusScope) return null;
     return InputMode.current === 'keys' ? 'key' : 'pointer';
   }
@@ -748,8 +749,41 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     return this.requestController.signal;
   }
 
+  // Back from the player: a finished episode handed its series' Continue tile
+  // to the next one, so the hero and the focus follow it there.
   refreshPlaybackState(): void {
-    if (this.mode === 'detail') this.renderDetail();
+    if (this.mode === 'detail') {
+      this.refreshDetailPlayback();
+      return;
+    }
+    if (this.mode !== 'browse' || !this.browseRendered || !this.account) return;
+    const resume = this.visibleResume(this.account.id);
+    const focused = this.current()?.dataset.resumeEpisode;
+    const focusedNext = this.resumeSuccessor(this.resume.find((r) => r.itemId === focused) ?? null, resume);
+    this.heroResume = this.resumeSuccessor(this.heroResume, resume);
+    this.heroPendingResume = this.resumeSuccessor(this.heroPendingResume, resume);
+    this.leaveBrowse();
+    this.renderBrowse(false);
+    const tile = focusedNext && Array.from(
+      this.layers.browse.querySelectorAll<HTMLElement>('[data-resume-episode]'),
+    ).find((el) => el.dataset.resumeEpisode === focusedNext.itemId);
+    if (tile) {
+      this.browseReturn = null;
+      this.place(tile, this.placementVia());
+    } else {
+      this.restoreBrowseFocus();
+    }
+  }
+
+  // The entry that now continues what `entry` resumed: itself, or the next
+  // episode of its series.
+  private resumeSuccessor(entry: ResumeEntry | null, resume: ResumeEntry[]): ResumeEntry | null {
+    if (!entry) return null;
+    const owner = entry.watchlistOwner;
+    return resume.find((r) => r.itemId === entry.itemId)
+      ?? (owner ? resume.find((r) => r.watchlistOwner?.kind === owner.kind
+        && r.watchlistOwner.itemId === owner.itemId) : undefined)
+      ?? null;
   }
 
   deactivate(): void {
@@ -926,6 +960,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   private route(action: Action): void {
     if (this.moveExtraFocus(action)) return;
     if (this.moveHeroFocus(action)) return;
+    if (this.moveDetailActionFocus(action)) return;
     if (this.mode === 'browse' && (action === 'left' || action === 'right')
         && this.moveRailFocus(action)) return;
     if (this.mode === 'grid'
@@ -1054,11 +1089,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     const current = this.current();
     if (!current) return false;
     if (action === 'left' || action === 'right') {
-      const buttons = Array.from(
-        this.layers.browse.querySelectorAll<HTMLElement>('.catalog-hero-actions [data-focusable]'),
-      );
-      const next = buttons[buttons.indexOf(current) + (action === 'left' ? -1 : 1)];
-      if (next) this.place(next, 'key');
+      this.stepButtonRow(current, '.catalog-hero-actions', action);
       return true;
     }
     if (action !== 'down') return false;
@@ -1066,6 +1097,24 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     if (!back) return false;
     this.place(back, 'key');
     return true;
+  }
+
+  // Left/Right walk the detail's action buttons and stop at the row's ends: a
+  // wide button's center can sit past a season button below its neighbor.
+  private moveDetailActionFocus(action: Action): boolean {
+    if (this.mode !== 'detail' || (action !== 'left' && action !== 'right')) return false;
+    const current = this.current();
+    if (!current?.closest('.detail-actions')) return false;
+    this.stepButtonRow(current, '.detail-actions', action);
+    return true;
+  }
+
+  private stepButtonRow(current: HTMLElement, row: string, action: 'left' | 'right'): void {
+    const buttons = Array.from(
+      current.closest(row)?.querySelectorAll<HTMLElement>('[data-focusable]') ?? [],
+    );
+    const next = buttons[buttons.indexOf(current) + (action === 'left' ? -1 : 1)];
+    if (next) this.place(next, 'key');
   }
 
   // The hero's buttons sit at the top of the rails' scroller; showing them
