@@ -651,6 +651,63 @@ describe('StorageService resume store', () => {
     expect(StorageService.getResumeList('x1').map((e) => e.itemId)).toEqual(['10']);
   });
 
+  describe('episodes', () => {
+    const ep = (itemId: string, code: string, over: Partial<ResumeEntry> = {}): ResumeEntry => resume({
+      kind: 'episode', itemId, name: `Series One — ${code} — Title`, duration: 2700,
+      watchlistOwner: { kind: 'series', itemId: 's1' }, ...over,
+    });
+    const queued = (itemId: string, code: string) => ({
+      url: `http://host/series/u/p/${itemId}.mkv`, title: `Series One — ${code} — Title`, poster: '',
+      accountId: 'x1', itemId, kind: 'episode' as const, subtitles: [],
+      watchlistOwner: { kind: 'series' as const, itemId: 's1' },
+    });
+
+    it('marks a finished episode watched and continues with the next', () => {
+      StorageService.setResume(ep('e20', 'S2E20', {
+        position: 2600, updatedAt: 5000, episodeQueue: [queued('e21', 'S2E21'), queued('e22', 'S2E22')],
+      }));
+      expect(StorageService.getResume('x1', 'episode', 'e20')?.watched).toBe(true);
+      const list = StorageService.getResumeList('x1');
+      expect(list.map((e) => e.itemId)).toEqual(['e21']);
+      expect(list[0].episodeQueue?.map((q) => q.itemId)).toEqual(['e22']);
+    });
+
+    it('moves an already started next episode to the front instead of replacing it', () => {
+      StorageService.setResume(ep('e21', 'S2E21', { position: 600, updatedAt: 1000 }));
+      StorageService.setResume(ep('x9', 'S1E1', { watchlistOwner: { kind: 'series', itemId: 's2' }, name: 'Series Two — S1E1', updatedAt: 3000 }));
+      StorageService.setResume(ep('e20', 'S2E20', { position: 2600, updatedAt: 5000, episodeQueue: [queued('e21', 'S2E21')] }));
+      const list = StorageService.getResumeList('x1');
+      expect(list[0]).toMatchObject({ itemId: 'e21', position: 600, updatedAt: 5000 });
+    });
+
+    it('marks earlier part-watched episodes of the series watched when a later one progresses', () => {
+      StorageService.setResume(ep('e13', 'S2E13', { updatedAt: 1000 }));
+      StorageService.setResume(ep('e8', 'S1E8', { updatedAt: 1100 }));
+      StorageService.setResume(ep('o1', 'S1E1', { watchlistOwner: { kind: 'series', itemId: 's2' }, name: 'Series Two — S1E1', updatedAt: 1200 }));
+      StorageService.setResume(ep('e16', 'S2E16', { updatedAt: 2000 }));
+      expect(StorageService.getResume('x1', 'episode', 'e13')?.watched).toBe(true);
+      expect(StorageService.getResume('x1', 'episode', 'e8')?.watched).toBe(true);
+      expect(StorageService.getResume('x1', 'episode', 'o1')?.watched).toBeUndefined();
+      expect(StorageService.getResumeList('x1').map((e) => e.itemId)).toEqual(['e16', 'o1']);
+    });
+
+    it('lists only the latest episode per series from older stored data', () => {
+      StorageService.set('resume', {
+        'x1|episode|e13': ep('e13', 'S2E13', { updatedAt: 1000 }),
+        'x1|episode|e15': ep('e15', 'S2E15', { updatedAt: 2000, watchlistOwner: undefined }),
+        'x1|episode|e20': ep('e20', 'S2E20', { updatedAt: 4000 }),
+        'x1|vod|10': resume({ updatedAt: 3000 }),
+      });
+      expect(StorageService.getResumeList('x1').map((e) => e.itemId)).toEqual(['e20', '10']);
+    });
+
+    it('keeps the queued next episode when it is only briefly started', () => {
+      StorageService.setResume(ep('e20', 'S2E20', { position: 2600, episodeQueue: [queued('e21', 'S2E21')] }));
+      StorageService.setResume(ep('e21', 'S2E21', { position: 5, updatedAt: 6000 }));
+      expect(StorageService.getResumeList('x1').map((e) => e.itemId)).toEqual(['e21']);
+    });
+  });
+
   it('stores and reads a picked online subtitle', () => {
     StorageService.setPickedOnlineSub('acc', 'vod', 'm1', { providerId: 'subdl', id: '9', name: 'Alpha', lang: 'l1', format: 'srt' });
     expect(StorageService.getPickedOnlineSub('acc', 'vod', 'm1')).toMatchObject({ id: '9', format: 'srt' });

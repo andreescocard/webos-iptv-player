@@ -4,6 +4,7 @@ import type { AudioPref, CatchupProgressEntry, Channel, ChannelCustomization, Ch
 import type { OnlineSubtitleConfig, PickedOnlineSub } from './subtitle-search/types';
 import { channelKey, legacyChannelKey } from '../utils/channel';
 import { extFromUrl } from '../utils/url';
+import { episodeOrder, sameSeries } from '../utils/episode-name';
 import { genPlaylistId } from '../utils/playlist';
 import { normalizeXtreamBaseUrl } from '../utils/xtream-url';
 import { createLogger } from '../utils/logger';
@@ -1148,26 +1149,48 @@ export const StorageService = {
     if (finished && entry.kind === 'episode') {
       // A finished episode stays on record as watched, and hands the Continue rail to the next one.
       this.writeResume({ ...entry, position: entry.duration, watched: true });
+      this.markEarlierEpisodesWatched(entry);
       const next = entry.episodeQueue?.[0];
-      const rest = entry.episodeQueue?.slice(1) ?? [];
-      if (next && !this.getResume(next.accountId, next.kind, next.itemId)) {
-        this.writeResume({
-          accountId: next.accountId, kind: next.kind, itemId: next.itemId,
-          name: next.title, poster: next.poster, ext: extFromUrl(next.url),
-          position: 0, duration: 0, updatedAt: entry.updatedAt,
-          episodeQueue: rest, watchlistOwner: next.watchlistOwner ?? entry.watchlistOwner,
-          categoryId: next.categoryId ?? entry.categoryId,
-        });
+      if (!next) return;
+      const existing = this.getResume(next.accountId, next.kind, next.itemId);
+      if (existing && !existing.watched) {
+        this.writeResume({ ...existing, updatedAt: entry.updatedAt });
+        return;
       }
+      this.writeResume({
+        accountId: next.accountId, kind: next.kind, itemId: next.itemId,
+        name: next.title, poster: next.poster, ext: extFromUrl(next.url),
+        position: 0, duration: 0, updatedAt: entry.updatedAt,
+        episodeQueue: entry.episodeQueue?.slice(1) ?? [],
+        watchlistOwner: next.watchlistOwner ?? entry.watchlistOwner,
+        categoryId: next.categoryId ?? entry.categoryId,
+      });
       return;
     }
-    if (entry.kind === 'episode' && this.getResume(entry.accountId, entry.kind, entry.itemId)?.watched
-        && !finished && entry.position < CONFIG.XTREAM.RESUME_MIN_SECS) return;
+    if (entry.kind === 'episode' && !finished && entry.position < CONFIG.XTREAM.RESUME_MIN_SECS) {
+      // Keep a watched mark, and the not-yet-started next episode the rail points at.
+      const existing = this.getResume(entry.accountId, entry.kind, entry.itemId);
+      if (existing && (existing.watched || existing.position === 0)) return;
+    }
     if (finished || entry.position < CONFIG.XTREAM.RESUME_MIN_SECS) {
       this.clearResume(entry.accountId, entry.kind, entry.itemId);
       return;
     }
     this.writeResume(entry);
+    if (entry.kind === 'episode') this.markEarlierEpisodesWatched(entry);
+  },
+  // Progress on an episode means the series' earlier part-watched episodes were left behind.
+  markEarlierEpisodesWatched(entry: ResumeEntry): void {
+    const order = episodeOrder(entry);
+    if (order === null) return;
+    const all = userData ? userData.resume : get<Record<string, ResumeEntry>>('resume', {});
+    Object.keys(all).map((k) => all[k]).forEach((e) => {
+      if (e.accountId !== entry.accountId || e.kind !== 'episode' || e.itemId === entry.itemId
+        || e.watched || !sameSeries(e, entry)) return;
+      const earlier = episodeOrder(e);
+      if (earlier === null || earlier >= order) return;
+      this.writeResume({ ...e, position: e.duration > 0 ? e.duration : e.position, watched: true });
+    });
   },
   writeResume(entry: ResumeEntry): void {
     if (userData) {
@@ -1187,6 +1210,9 @@ export const StorageService = {
       .map((k) => all[k])
       .filter((e) => e.accountId === accountId && !e.watched)
       .sort((a, b) => b.updatedAt - a.updatedAt)
+      // Only a series' most recently watched episode continues; older ones may linger in stored data.
+      .filter((e, i, list) => e.kind !== 'episode'
+        || !list.slice(0, i).some((prev) => prev.kind === 'episode' && sameSeries(prev, e)))
       .map(cloneValue);
   },
   clearResume(accountId: string, kind: ResumeKind, itemId: string): void {

@@ -10,6 +10,7 @@ import { showToast } from './toast';
 import { t, tp } from '../i18n';
 import { VirtualList } from '../utils/virtual-list';
 import { lazySrc } from '../utils/lazy-images';
+import { cleanEpisodeTitle, episodeLine, parseEpisodeName } from '../utils/episode-name';
 
 const EPISODE_GAP = 16;
 const EPISODE_NO_PLOT_ESTIMATE = 138;
@@ -27,16 +28,6 @@ const EPISODE_VIEWPORT_FALLBACK = 984;
 // machinery lives in CatalogView.
 function seriesMinutes(info: SeriesInfo): string {
   return info.episodeRunTimeMins > 0 ? t('catalog.minutes', { count: info.episodeRunTimeMins }) : '';
-}
-
-// Resume names are composed as "<Series> — S2E5 — <Title>" (see episodeLabel).
-function parseEpisodeName(name: string): { series: string; code: string; title: string } {
-  const m = /^(.*?) [—-] (S\d+E\d+)(?: [—-] (.*))?$/.exec(name);
-  return m ? { series: m[1], code: m[2], title: m[3] ?? '' } : { series: name, code: '', title: '' };
-}
-
-function episodeLine(p: { code: string; title: string }): string {
-  return p.code ? (p.title ? `${p.code} · ${p.title}` : p.code) : '';
 }
 
 export class Series extends CatalogView<SeriesCategory, SeriesItem> {
@@ -293,7 +284,8 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
 
   private episodeLabel(series: SeriesItem, ep: Episode): string {
     const code = `S${ep.season}E${ep.episode}`;
-    return ep.title ? `${series.name} — ${code} — ${ep.title}` : `${series.name} — ${code}`;
+    const title = cleanEpisodeTitle(ep.title, series.name);
+    return title ? `${series.name} — ${code} — ${title}` : `${series.name} — ${code}`;
   }
 
   private episodePlayback(series: SeriesItem, ep: Episode): VodQueueItem {
@@ -346,7 +338,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     const a = this.account;
     const r = this.resume.find((e) => e.itemId === episodeId);
     if (!a || !r) return;
-    this.handlers.onPlayVod({
+    const play = (episodeQueue: VodQueueItem[] | undefined): void => this.handlers.onPlayVod({
       url: xtreamEpisodeUrl(this.creds(), r.itemId, r.ext || 'mp4'),
       title: r.name,
       poster: r.poster,
@@ -357,9 +349,23 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
       parentalItemId: r.watchlistOwner?.itemId,
       resumeSecs: r.position,
       subtitles: [],
-      episodeQueue: r.episodeQueue,
+      episodeQueue,
       watchlistOwner: r.watchlistOwner,
     });
+    const series = this.resumeHeroItem(r);
+    const signal = this.requestSignal;
+    if (r.episodeQueue || !series || !signal) {
+      play(r.episodeQueue);
+      return;
+    }
+    // An entry saved without its queue rebuilds it, so finishing it still moves on.
+    const request = ++this.heroPlayRequest;
+    void loadSeriesInfo(a, series.seriesId, signal)
+      .catch((): SeriesInfo | null => null)
+      .then((info) => {
+        if (signal.aborted || request !== this.heroPlayRequest || this.account?.id !== a.id) return;
+        play(info ? this.episodesAfter(info, r.itemId, series) : undefined);
+      });
   }
 
   protected resumeHeroItem(r: ResumeEntry): SeriesItem | null {
@@ -383,11 +389,9 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
   protected heroResumeNote(_series: SeriesItem, r: ResumeEntry): Safe | '' {
     const label = episodeLine(parseEpisodeName(r.name));
     if (!label) return '';
-    const pct = r.duration > 0 ? Math.min(100, Math.round((r.position / r.duration) * 100)) : 0;
     return html`
       <div class="catalog-hero-episode" data-key="hero-episode">
         <div class="catalog-hero-episode-name">${label}</div>
-        ${pct > 0 ? html`<div class="episode-progress catalog-hero-episode-progress"><div class="episode-progress-fill" style="width:${pct}%"></div></div>` : ''}
       </div>`;
   }
 

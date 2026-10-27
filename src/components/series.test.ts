@@ -135,7 +135,7 @@ describe('Series browse + grid', () => {
         await settle();
         expect(title()).toBe('Series Two');
         expect(container.querySelector('.catalog-hero-episode-name')?.textContent).toBe('S2E5 · Episode Five');
-        expect(container.querySelector<HTMLElement>('.catalog-hero-episode-progress .episode-progress-fill')?.style.width).toBe('50%');
+        expect(container.querySelector('.catalog-hero-body .episode-progress')).toBeNull();
         expect(container.querySelector('.catalog-hero-backdrop')?.getAttribute('src')).toBe('http://host/still.jpg');
       });
 
@@ -159,6 +159,18 @@ describe('Series browse + grid', () => {
         expect(tile.querySelector('.catalog-tile-name')?.textContent).toBe('Series Two');
         expect(tile.querySelector('.catalog-tile-episode')?.textContent).toBe('S2E5 · Episode Five');
         expect(tile.querySelector<HTMLElement>('.catalog-tile-progress-fill')?.style.width).toBe('50%');
+      });
+
+      it('drops the series name and code an episode title repeats', async () => {
+        storageMock.getResumeList.mockReturnValue([entry({ name: 'Series Two — S2E5 — Series Two - S02E05 - Episode Five' })]);
+        catalogMock.loadSeriesInfo.mockResolvedValue(info());
+        await openWith([{ id: '1', name: 'Cat A' }], [s1, s2]);
+        const tile = container.querySelector('.catalog-tile[data-resume-episode="e2"]')!;
+        expect(tile.querySelector('.catalog-tile-episode')?.textContent).toBe('S2E5 · Episode Five');
+        hover('.catalog-tile[data-resume-episode="e2"]');
+        vi.advanceTimersByTime(500);
+        await settle();
+        expect(container.querySelector('.catalog-hero-episode-name')?.textContent).toBe('S2E5 · Episode Five');
       });
 
       it('draws no progress bar for a next episode not started yet', async () => {
@@ -188,13 +200,28 @@ describe('Series browse + grid', () => {
       catalogMock.loadSeriesInfo.mockResolvedValue(info());
       storageMock.getResumeList.mockReturnValue([{
         accountId: 'x1', kind: 'episode', itemId: 'e2', name: 'Series One — S1E2', poster: '', ext: 'mkv',
-        position: 300, duration: 600, updatedAt: 1, watchlistOwner: { kind: 'series', itemId: 's1' },
+        position: 300, duration: 600, updatedAt: 1, episodeQueue: [], watchlistOwner: { kind: 'series', itemId: 's1' },
       }]);
       const { view, handlers } = await openWith([{ id: '1', name: 'Cat A' }], [s1]);
       expect(container.querySelector('[data-hero-action="play"]')?.textContent).toContain('Resume');
       hover('[data-hero-action="play"]');
       view.handleAction('select');
       expect(handlers.onPlayVod).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'e2', resumeSecs: 300 }));
+    });
+
+    it('rebuilds the episode queue of a resume entry saved without one', async () => {
+      catalogMock.loadSeriesInfo.mockResolvedValue(info());
+      storageMock.getResumeList.mockReturnValue([{
+        accountId: 'x1', kind: 'episode', itemId: 'e1', name: 'Series One — S1E1', poster: '', ext: 'mkv',
+        position: 300, duration: 600, updatedAt: 1, watchlistOwner: { kind: 'series', itemId: 's1' },
+      }]);
+      const { view, handlers } = await openWith([{ id: '1', name: 'Cat A' }], [s1]);
+      hover('[data-hero-action="play"]');
+      view.handleAction('select');
+      await settle();
+      expect(handlers.onPlayVod).toHaveBeenCalledWith(expect.objectContaining({
+        itemId: 'e1', resumeSecs: 300, episodeQueue: [expect.objectContaining({ itemId: 'e2' })],
+      }));
     });
 
     it('opens on the last watched series instead of the first listed', async () => {

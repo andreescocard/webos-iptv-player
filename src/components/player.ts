@@ -84,6 +84,8 @@ export class Player {
   // reset to Date.now() on every new catch-up session so the first checkpoint
   // fires CHECKPOINT_INTERVAL after tune-in, not immediately.
   private catchupCheckpointAt = 0;
+  // Wall-clock time of the last periodic VOD resume save.
+  private vodCheckpointAt = 0;
   // Position (seconds) saved from the video element before suspend() destroys it.
   // play() consumes this to restore the position on resume; -1 = not pending.
   private catchupSuspendPos = -1;
@@ -394,6 +396,8 @@ export class Player {
 
   suspend(): void {
     this.startupWatchdog.stop();
+    // Home or power-off never reaches stop(), so the VOD resume point is saved here.
+    if (this.vod && !this.upNextTimer) this.saveVodResume();
     if (!this.videoEl || !this.currentChannel) return;
     if (this.wasPlayingBeforeHide) return; // already suspended
     this.wasPlayingBeforeHide = !this.videoEl.paused;
@@ -671,6 +675,7 @@ export class Player {
     this.currentScope = null;
     this.catchupInfo = null;
     this.vod = v;
+    this.vodCheckpointAt = Date.now();
     this.pendingResumeSecs = v.resumeSecs > 0 ? v.resumeSecs : 0;
     this.pendingSeekTarget = null;
     this.osd.clearFailedIcons();
@@ -690,16 +695,15 @@ export class Player {
     show(this.container);
   }
 
-  private saveVodResume(): void {
-    const v = this.vod;
+  private saveVodResume(v = this.vod, ended = false): void {
     const el = this.videoEl;
     if (!v || !el) return;
-    const dur = Number.isFinite(el.duration) ? el.duration : 0;
+    const dur = Number.isFinite(el.duration) ? el.duration : ended ? el.currentTime : 0;
     if (dur <= 0) return; // metadata not loaded yet — currentTime is 0/unknown; don't clobber the stored point
     StorageService.setResume({
       accountId: v.accountId, kind: v.kind, itemId: v.itemId,
       name: v.title, poster: v.poster, ext: extFromUrl(v.url),
-      position: this.pendingSeekTarget ?? (el.currentTime || 0),
+      position: ended ? dur : this.pendingSeekTarget ?? (el.currentTime || 0),
       duration: dur,
       updatedAt: Date.now(),
       episodeQueue: v.episodeQueue,
@@ -819,7 +823,9 @@ export class Player {
     if (this.vod) {
       const v = this.vod;
       this.vod = null; // before stop(), so it doesn't re-save a resume point for a finished movie
-      StorageService.clearResume(v.accountId, v.kind, v.itemId);
+      // An episode is marked watched, which also moves Continue Watching to the next one.
+      if (v.kind === 'episode') this.saveVodResume(v, true);
+      else StorageService.clearResume(v.accountId, v.kind, v.itemId);
       if (v.kind === 'vod') {
         StorageService.removeWatchlist(v.accountId, 'vod', v.itemId);
       } else if ((v.episodeQueue?.length ?? 0) === 0 && v.watchlistOwner) {
@@ -1005,6 +1011,10 @@ export class Player {
     if (this.vod) {
       const v = this.vod;
       this.vod = null;            // so stop() won't overwrite/wipe the resume point on error
+      const el = this.videoEl;
+      // A stream that drops during the closing credits still finished the episode.
+      if (v.kind === 'episode' && el && Number.isFinite(el.duration) && el.duration > 0
+        && el.currentTime >= el.duration - CONFIG.XTREAM.EPISODE_FINISH_PAD) this.saveVodResume(v, true);
       log.warn('VOD playback error', 'event=playback.vod.error',
         this.playbackLabel(), v.title);
       this.stop();
@@ -1335,6 +1345,13 @@ export class Player {
       if (now - this.catchupCheckpointAt >= CONFIG.CATCHUP.CHECKPOINT_INTERVAL) {
         this.catchupCheckpointAt = now;
         this.saveCatchupProgress();
+      }
+    }
+    if (this.vod && !this.upNextTimer) {
+      const now = Date.now();
+      if (now - this.vodCheckpointAt >= CONFIG.XTREAM.RESUME_CHECKPOINT_INTERVAL) {
+        this.vodCheckpointAt = now;
+        this.saveVodResume();
       }
     }
     this.osd.refreshProgress();

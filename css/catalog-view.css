@@ -90,7 +90,6 @@ html[data-animation="essential"] .catalog-hero-art { animation: none; }
 }
 .catalog-hero-episode { margin-top: 12px; max-width: 640px; }
 .catalog-hero-episode-name { font-size: 28px; font-weight: 600; color: var(--text-primary); }
-.catalog-hero-episode-progress { position: relative; margin-top: 12px; border-radius: 3px; overflow: hidden; }
 .catalog-hero-actions { display: flex; gap: 16px; margin-top: 24px; }
 .catalog-fill {
   margin-top: 16px; font-size: 22px; color: var(--text-secondary);

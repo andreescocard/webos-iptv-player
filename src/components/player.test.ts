@@ -1341,6 +1341,55 @@ describe('Player VOD mode', () => {
     }));
   });
 
+  it('saves the resume point when the app is backgrounded mid-VOD', () => {
+    const video = fakeVideo(2700);
+    player.init(video);
+    player.playVod(req({ itemId: 'e1', kind: 'episode' }));
+    video.currentTime = 2600;
+    vi.mocked(StorageService.setResume).mockClear();
+    player.suspend();
+    expect(StorageService.setResume).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: 'e1', position: 2600, duration: 2700,
+    }));
+  });
+
+  it('checkpoints the VOD resume point periodically while playing', () => {
+    const video = fakeVideo(2700);
+    player.init(video);
+    player.playVod(req());
+    vi.mocked(StorageService.setResume).mockClear();
+    video.currentTime = 100;
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(StorageService.setResume).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(CONFIG.XTREAM.RESUME_CHECKPOINT_INTERVAL);
+    video.currentTime = 130;
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(StorageService.setResume).toHaveBeenCalledWith(expect.objectContaining({ itemId: '10', position: 130 }));
+  });
+
+  it('records an ended episode as watched through to its end', () => {
+    const video = fakeVideo(2700);
+    player.init(video);
+    vi.mocked(StorageService.clearResume).mockClear();
+    vi.mocked(StorageService.setResume).mockClear();
+    player.playVod(req({ itemId: 'e1', kind: 'episode', watchlistOwner: { kind: 'series', itemId: 's1' } }));
+    video.dispatchEvent(new Event('ended'));
+    expect(StorageService.setResume).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: 'e1', position: 2700, duration: 2700,
+    }));
+    expect(StorageService.clearResume).not.toHaveBeenCalled();
+  });
+
+  it('records an episode whose stream fails in the closing credits as finished', () => {
+    const video = fakeVideo(2700);
+    player.init(video);
+    player.playVod(req({ itemId: 'e1', kind: 'episode' }));
+    video.currentTime = 2650;
+    vi.mocked(StorageService.setResume).mockClear();
+    video.dispatchEvent(new Event('error'));
+    expect(StorageService.setResume).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'e1', position: 2700 }));
+  });
+
   it('clears resume and Watchlist state when a movie ends', () => {
     const video = fakeVideo(3600);
     player.init(video);
