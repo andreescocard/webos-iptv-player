@@ -412,6 +412,25 @@ describe('Series browse + grid', () => {
     view.handleAction('back'); // detail -> browse re-render
     expect(container.textContent).toContain('Continue Watching');
   });
+
+  it('advances the Continue rail and hero when playback returns to browse', async () => {
+    const resumeEntry = (id: string, n: number) => ({
+      accountId: 'x1', kind: 'episode', itemId: id, name: `Series One — S1E${String(n)} — Episode ${String(n)}`,
+      poster: '', ext: 'mkv', position: 0, duration: 600, updatedAt: 1, categoryId: '1',
+      watchlistOwner: { kind: 'series', itemId: 's1' },
+    });
+    storageMock.getResumeList.mockReturnValue([resumeEntry('e1', 1)]);
+    const { view } = await openWith();
+    const tile = container.querySelector('.catalog-tile[data-resume-episode="e1"]')!;
+    tile.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+    expect(container.querySelector('.catalog-tile[data-resume-episode="e1"]')).not.toBeNull();
+    // The player finished e1 and saved e2 as the resume target before Back.
+    storageMock.getResumeList.mockReturnValue([resumeEntry('e2', 2)]);
+    view.refreshPlaybackState();
+    expect(container.querySelector('.catalog-tile[data-resume-episode="e1"]')).toBeNull();
+    expect(container.querySelector('.catalog-tile[data-resume-episode="e2"]')).not.toBeNull();
+    expect(view.focusScope.focusKey).toContain('r:e2');
+  });
 });
 
 const SERIES_INFO = {

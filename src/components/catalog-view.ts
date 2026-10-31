@@ -749,7 +749,22 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   }
 
   refreshPlaybackState(): void {
-    if (this.mode === 'detail') this.renderDetail();
+    if (this.mode === 'detail') {
+      this.renderDetail();
+      return;
+    }
+    if (this.mode !== 'browse' || !this.browseRendered || !this.account) return;
+    // Playback just saved or advanced the resume entry; the browse layer
+    // kept the one it rendered before the player took over.
+    const shown = this.heroResume;
+    if (shown) {
+      const owner = shown.watchlistOwner?.itemId;
+      this.heroResume = this.visibleResume(this.account.id).find((r) => owner
+        ? r.watchlistOwner?.itemId === owner
+        : r.itemId === shown.itemId) ?? null;
+    }
+    this.leaveBrowse();
+    this.renderBrowse();
   }
 
   deactivate(): void {

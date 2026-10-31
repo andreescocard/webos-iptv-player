@@ -44,6 +44,8 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
   private selectedSeason = 0;
   private detailLoading = false;
   private episodeFocusIndex = 0;
+  // The action button Down left for the seasons, which Up returns to.
+  private detailActionKey: string | null = null;
   private episodeSource: Episode[] | null = null;
   private measuredEpisodes = new Set<number>();
   private detailController: AbortController | null = null;
@@ -247,6 +249,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     this.currentInfo = null;
     this.selectedSeason = 0;
     this.episodeFocusIndex = 0;
+    this.detailActionKey = null;
     this.episodeSource = null;
     this.episodeVirtualizer.setScrollOffset(0);
     this.detailLoading = true;
@@ -610,12 +613,19 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
   }
 
   protected moveExtraFocus(action: Action): boolean {
-    if (this.mode !== 'detail' || (action !== 'up' && action !== 'down')) return false;
+    if (this.mode !== 'detail') return false;
+    if (this.moveHeadFocus(action)) return true;
+    if (action !== 'up' && action !== 'down') return false;
     const key = this.focusedKey();
     const current = key === null ? -1 : this.episodeIndexOf(key);
     if (current < 0) return false;
     const episodes = this.selectedEpisodes();
     const next = current + (action === 'up' ? -1 : 1);
+    const season = next < 0 ? this.selectedSeasonButton() : null;
+    if (season) {
+      this.place(season, 'key');
+      return true;
+    }
     if (next < 0 || next >= episodes.length) return false;
     const list = this.layer('detail').querySelector<HTMLElement>('.series-detail');
     this.episodeFocusIndex = next;
@@ -631,6 +641,47 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
       'key',
     );
     return true;
+  }
+
+  // The action buttons and the seasons are separate rows: by geometry alone a
+  // move crossed between them to whichever button sat nearest.
+  private moveHeadFocus(action: Action): boolean {
+    const el = this.current();
+    const row = el?.closest<HTMLElement>('.detail-actions, .series-seasons');
+    if (!el || !row) return false;
+    const items = Array.from(row.querySelectorAll<HTMLElement>('[data-focusable]'));
+    const inActions = row.classList.contains('detail-actions');
+    if (action === 'left' || action === 'right') {
+      const next = items[items.indexOf(el) + (action === 'left' ? -1 : 1)];
+      if (next) this.place(next, 'key');
+      return true;
+    }
+    if (action === 'down' && inActions) {
+      const season = this.selectedSeasonButton();
+      if (!season) return false;
+      this.detailActionKey = el.dataset.key ?? null;
+      this.place(season, 'key');
+      return true;
+    }
+    // Only the seasons' first line climbs to the buttons; a wrapped line
+    // moves up within the seasons.
+    if (action === 'up' && !inActions && el.offsetTop === items[0].offsetTop) {
+      const actions = this.layer('detail').querySelector<HTMLElement>('.detail-actions');
+      if (!actions) return false;
+      const target = (this.detailActionKey !== null
+        && this.focusableByKey(actions, this.detailActionKey))
+        || actions.querySelector<HTMLElement>('[data-focusable]');
+      if (!target) return false;
+      this.place(target, 'key');
+      return true;
+    }
+    return false;
+  }
+
+  private selectedSeasonButton(): HTMLElement | null {
+    return this.layer('detail').querySelector<HTMLElement>(
+      `.series-season-btn[data-season="${this.selectedSeason}"]`,
+    );
   }
 
   protected handleExtraScroll(target: HTMLElement): boolean {

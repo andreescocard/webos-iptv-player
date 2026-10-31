@@ -282,3 +282,82 @@ test('the hero follows the resting focus, and Up/Down move between its buttons a
   await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 461, bubbles: true })));
   await expect(view.locator('[data-hero-action="info"].focused')).toHaveCount(1);
 });
+
+test('Series detail D-pad keeps rows: actions across, selected season below, back up to the action', async ({ page }) => {
+  await page.route('**/get.php*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/x-mpegurl', body: SAMPLE_M3U }));
+  await page.route('**/xmltv.php*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/xml', body: '<tv></tv>' }));
+  const episode = (id: number, season: number) => ({
+    id, title: `Episode ${id}`, season, episode_num: 1, container_extension: 'mp4',
+    info: { plot: '', duration_secs: 600, movie_image: '' },
+  });
+  await page.route('**/player_api.php*', (route) => {
+    const url = route.request().url();
+    const json = (body: unknown) => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify(body),
+    });
+    if (url.includes('get_series_categories')) return json([{ category_id: '1', category_name: 'Cat A' }]);
+    if (url.includes('get_series_info')) {
+      return json({
+        info: { name: 'Series One', plot: 'A plot.' },
+        episodes: {
+          '1': [episode(11, 1)], '2': [episode(21, 2)], '3': [episode(31, 3)],
+          '4': [episode(41, 4)], '5': [episode(51, 5)],
+        },
+      });
+    }
+    if (url.includes('get_series')) return json([{ series_id: 1, name: 'Series One', cover: '', category_id: '1' }]);
+    return json({});
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem('iptv_playlists', JSON.stringify([
+      { id: 'x1', name: 'X Account', url: 'http://host.example.com:8080',
+        source: 'xtream', xtream: { username: 'u', password: 'p' } },
+    ]));
+  });
+  await page.goto('/');
+  await expect(page.locator('#view-channels')).toBeVisible();
+  await enterTab(page, 'series');
+  await page.locator('.catalog-tile[data-item-id="1"]')
+    .evaluate((el) => el.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true })));
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#view-series .series-season-btn[data-season="5"]')).toBeVisible();
+
+  const focused = () => page.locator('#view-series .series-detail .focused[data-key]');
+  const press = async (key: string, expected: string) => {
+    await page.keyboard.press(key);
+    await expect(focused()).toHaveAttribute('data-key', expected);
+  };
+
+  // The detail opens on its first button; Right walks the action row and
+  // stops at its end instead of dropping into the seasons below.
+  await expect(focused()).toHaveAttribute('data-key', 'watchlist');
+  await press('ArrowRight', 'trailer');
+  await press('ArrowRight', 'trailer');
+  // Down lands on the selected season, not on whichever sits under the button.
+  await press('ArrowDown', 'season:1');
+  // Left/Right stay on the season row instead of climbing to the buttons.
+  await press('ArrowRight', 'season:2');
+  await press('ArrowRight', 'season:3');
+  await press('ArrowRight', 'season:4');
+  await press('ArrowLeft', 'season:3');
+  // Up returns to the button Down left.
+  await press('ArrowUp', 'trailer');
+  await press('ArrowLeft', 'watchlist');
+  await press('ArrowLeft', 'watchlist');
+  await press('ArrowDown', 'season:1');
+  await press('ArrowUp', 'watchlist');
+
+  // Pick season 4: Up from its first episode returns to it, not to season 1.
+  await press('ArrowDown', 'season:1');
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+  await expect(focused()).toHaveAttribute('data-key', 'season:4');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#view-series .series-season-btn.active')).toHaveAttribute('data-season', '4');
+  await press('ArrowDown', 'ep:41');
+  await press('ArrowUp', 'season:4');
+  await press('ArrowUp', 'watchlist');
+  await press('ArrowRight', 'trailer');
+  await press('ArrowDown', 'season:4');
+});
