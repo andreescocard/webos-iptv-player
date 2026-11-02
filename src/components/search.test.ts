@@ -7,10 +7,7 @@ const {
   catalogMock,
   playlistMock,
   epgMock,
-  reminderMock,
   storageMock,
-  archiveMock,
-  toastMock,
   workerMock,
   cacheMock,
   persistMock,
@@ -34,20 +31,10 @@ const {
   epgMock: {
     programmes: {} as Record<string, Programme[]>,
     findChannelId: vi.fn((channel: { id: string }) => channel.id),
-    getSourceUrl: vi.fn(() => 'http://host/epg.xml'),
-    programmeCacheOrigin: vi.fn((): unknown => null),
   },
-  reminderMock: { has: vi.fn(() => false), add: vi.fn(), remove: vi.fn() },
   storageMock: {
-    getCatchupProgressList: vi.fn(() => [] as unknown[]),
-    clearCatchupProgress: vi.fn(),
     addSearchHistory: vi.fn(),
   },
-  archiveMock: {
-    load: vi.fn(async () => null as Set<number> | null),
-    isAvailable: vi.fn((channel: { catchupSource?: string }) => !!channel.catchupSource),
-  },
-  toastMock: vi.fn(),
   workerMock: {
     run: vi.fn(),
     retain: vi.fn(() => vi.fn()),
@@ -64,10 +51,7 @@ const {
 vi.mock('../services/xtream-catalog', () => catalogMock);
 vi.mock('../services/playlist-service', () => ({ PlaylistService: playlistMock }));
 vi.mock('../services/epg-service', () => ({ EpgService: epgMock }));
-vi.mock('../services/reminder-service', () => ({ ReminderService: reminderMock }));
 vi.mock('../services/storage-service', () => ({ StorageService: storageMock }));
-vi.mock('../services/xtream-archive', () => ({ XtreamArchiveService: archiveMock }));
-vi.mock('./toast', () => ({ showToast: toastMock }));
 vi.mock('../services/search-index-store', () => ({ persistSearchIndexes: persistMock }));
 vi.mock('../services/idb-cache', async importOriginal => ({
   ...await importOriginal<typeof import('../services/idb-cache')>(),
@@ -142,14 +126,9 @@ beforeEach(() => {
   playlistMock.indexOf.mockReturnValue(0);
   playlistMock.getChannelCacheSource.mockReturnValue(null);
   catalogMock.getCatalogFill.mockReturnValue(null);
-  epgMock.programmeCacheOrigin.mockReturnValue(null);
   cacheMock.records.clear();
   epgMock.programmes = {};
   epgMock.findChannelId.mockImplementation((channel: { id: string }) => channel.id);
-  reminderMock.has.mockReturnValue(false);
-  storageMock.getCatchupProgressList.mockReturnValue([]);
-  archiveMock.load.mockResolvedValue(null);
-  archiveMock.isAvailable.mockImplementation((channel: { catchupSource?: string }) => !!channel.catchupSource);
   catalogMock.getSearchCatalogExpiresAt.mockResolvedValue(
     Date.now() + CONFIG.XTREAM.DEFAULT_CATALOG_REFRESH_INTERVAL_MS,
   );
@@ -257,6 +236,28 @@ afterEach(() => {
 });
 
 describe('Search', () => {
+  it('ignores program-only titles while returning matching channels, movies and series', async () => {
+    playlistMock.channels = [chan('Matching Channel')];
+    epgMock.programmes = {
+      'Matching Channel': [prog('Exclusive Broadcast', Date.now() + 3600000, Date.now() + 7200000)],
+    };
+    const { view } = await openWith({
+      vod: [vod('movie-test', 'Matching Movie')],
+      series: [ser('series-test', 'Matching Series')],
+    });
+    await view.setQuery('exclusive broadcast');
+    expect(container.querySelector('[data-focusable]')).toBeNull();
+    expect(container.textContent).toContain('No results');
+    expect(epgMock.findChannelId).not.toHaveBeenCalled();
+
+    await view.setQuery('matching');
+    expect(container.textContent).toContain('Matching Channel');
+    expect(container.textContent).toContain('Matching Movie');
+    expect(container.textContent).toContain('Matching Series');
+    expect(Array.from(container.querySelectorAll('.catalog-rail-title'), el => el.textContent))
+      .toEqual(['Channels', 'Movies', 'Series']);
+  });
+
   it('renders results-only and empty on open (no in-view query box, no hint)', async () => {
     await openWith();
     expect(container.querySelector('.search-results')).not.toBeNull();
@@ -281,7 +282,7 @@ describe('Search', () => {
       ([task, payload]) => task === 'search.index' && (payload as SearchIndexRequest).reset,
     )).toHaveLength(initialResets);
     expect(diagEvents(info, 'search.index.ready'))
-      .toEqual([expect.stringContaining('mode=reused channels=1 programmes=0 items=1')]);
+      .toEqual([expect.stringContaining('mode=reused channels=1 items=1')]);
     info.mockRestore();
     expect(catalogMock.loadAllVodStreams).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain('Alpha Movie');
@@ -437,7 +438,7 @@ describe('Search', () => {
 
     expect(diagEvents(warn, 'search.worker.index.missing')).toEqual([]);
     expect(diagEvents(info, 'search.index.ready'))
-      .toEqual([expect.stringContaining('mode=fallback channels=1 programmes=0 items=1')]);
+      .toEqual([expect.stringContaining('mode=fallback channels=1 items=1')]);
     warn.mockRestore();
     info.mockRestore();
     expect(workerMock.run.mock.calls.filter(
@@ -469,7 +470,7 @@ describe('Search', () => {
 
     expect(diagEvents(warn, 'search.worker.index.missing')).toEqual([]);
     expect(diagEvents(info, 'search.index.ready'))
-      .toEqual([expect.stringContaining('mode=fallback channels=1 programmes=0 items=1')]);
+      .toEqual([expect.stringContaining('mode=fallback channels=1 items=1')]);
     warn.mockRestore();
     info.mockRestore();
     expect(container.textContent).toContain('Alpha Movie');
@@ -498,7 +499,7 @@ describe('Search', () => {
 
     expect(diagEvents(warn, 'search.worker.index.missing')).toEqual([]);
     expect(diagEvents(info, 'search.index.ready'))
-      .toEqual([expect.stringContaining('mode=fallback channels=1 programmes=0 items=1')]);
+      .toEqual([expect.stringContaining('mode=fallback channels=1 items=1')]);
     warn.mockRestore();
     info.mockRestore();
     expect(container.textContent).toContain('Alpha Movie');
@@ -522,7 +523,7 @@ describe('Search', () => {
     await view.setQuery('alpha');
 
     expect(diagEvents(info, 'search.index.ready'))
-      .toEqual([expect.stringContaining('mode=reused channels=1 programmes=0 items=1')]);
+      .toEqual([expect.stringContaining('mode=reused channels=1 items=1')]);
     expect(diagEvents(warn, 'search.worker.index.missing')).toHaveLength(1);
     error.mockRestore();
     warn.mockRestore();
@@ -705,43 +706,6 @@ describe('Search', () => {
     expect(diagEvents(warn, 'search.worker.fallback.used')).toEqual([]);
     expect(container.textContent).toContain('Alpha Sequel');
     expect(container.textContent).not.toContain('Alpha Movie');
-  });
-
-  it('posts the programmes an EPG refresh replaced during a crash rebuild', async () => {
-    const later = (offset: number) => [Date.now() + offset * 3600000, Date.now() + (offset + 1) * 3600000] as const;
-    playlistMock.channels = [chan('Alpha')];
-    epgMock.programmes = { Alpha: [prog('Old Report', ...later(1))] };
-    const { view } = await openWith();
-    workerMock.restart();
-    const hold = holdWorkerTask((task, payload) => task === 'search.index' && payload.chunk?.source === 'channels');
-    const info = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      // The query finds the new worker empty and rebuilds; its channels post stalls.
-      const query = view.setQuery('report');
-      await vi.waitFor(() => expect(hold.held).toBe(true));
-      epgMock.programmes = { Alpha: [prog('New Show', ...later(1)), prog('Late Report', ...later(2))] };
-      const refresh = view.refreshPrograms();
-      await vi.waitFor(() => expect(workerMock.run.mock.calls.some(([task, payload]) => task === 'search.index'
-        && JSON.stringify((payload as SearchIndexRequest).chunk?.documents ?? []).includes('Late Report')))
-        .toBe(true));
-      hold.release();
-      await Promise.all([query, refresh]);
-      await view.setQuery('report');
-      expect(container.querySelector('.search-program-row')?.textContent).toContain('Late Report');
-
-      info.mockClear();
-      view.deactivate();
-      await view.open(account);
-      await view.setQuery('report');
-      expect(diagEvents(info, 'search.index.ready')).toEqual([expect.stringContaining('mode=reused')]);
-    } finally {
-      hold.release();
-      hold.restore();
-    }
-
-    const rows = Array.from(container.querySelectorAll('.search-program-row'), row => row.textContent);
-    expect(rows).toEqual([expect.stringContaining('Late Report')]);
   });
 
   it('posts the channels a playlist change replaced during a crash rebuild', async () => {
@@ -1055,41 +1019,6 @@ describe('Search', () => {
     expect(namePosts('Alpha Old Show')).toHaveLength(0);
   });
 
-  it('does not reuse an index a crash rebuild finished after the guide refreshed while closed', async () => {
-    const later = (offset: number) => [Date.now() + offset * 3600000, Date.now() + (offset + 1) * 3600000] as const;
-    playlistMock.channels = [chan('Alpha')];
-    epgMock.programmes = { Alpha: [prog('Old Report', ...later(1))] };
-    const { view } = await openWith();
-    workerMock.restart();
-    const hold = holdWorkerTask((task, payload) => task === 'search.index' && payload.chunk?.source === 'channels');
-    const info = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      // The query finds the new worker empty and rebuilds; its channels post stalls.
-      const query = view.setQuery('report');
-      await vi.waitFor(() => expect(hold.held).toBe(true));
-      view.deactivate();
-      epgMock.programmes = { Alpha: [prog('New Report', ...later(1))] };
-      await view.refreshPrograms();
-      hold.release();
-      await query;
-      // The rebuild posted the program index of the old guide data.
-      await vi.waitFor(() => expect(diagEvents(info, 'search.worker.index.ready')).toHaveLength(1));
-
-      info.mockClear();
-      await view.open(account);
-      await indexReady(view);
-      await view.setQuery('report');
-      expect(diagEvents(info, 'search.index.ready')).toEqual([expect.not.stringContaining('mode=reused')]);
-    } finally {
-      hold.release();
-      hold.restore();
-    }
-
-    const rows = Array.from(container.querySelectorAll('.search-program-row'), row => row.textContent);
-    expect(rows).toEqual([expect.stringContaining('New Report')]);
-  });
-
   it('does not reuse an index whose channels were replaced before it settled while closed', async () => {
     playlistMock.channels = [chan('Alpha')];
     let finishVod!: (items: unknown[]) => void;
@@ -1098,7 +1027,7 @@ describe('Search', () => {
     const view = new Search(container, mkHandlers());
     openViews.push(view);
     const info = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    // Channels and programmes reach the worker; the catalog is still loading.
+    // Channels reach the worker; the catalog is still loading.
     await view.open(account);
     view.deactivate();
     playlistMock.channels = [chan('Bravo')];
@@ -1124,7 +1053,7 @@ describe('Search', () => {
     expect(workerMock.run.mock.calls.filter(
       ([task, payload]) => task === 'search.index' && (payload as SearchIndexRequest).reset,
     )).toHaveLength(2);
-    expect(container.textContent).toContain('Bravo');
+    await vi.waitFor(() => expect(container.textContent).toContain('Bravo'));
   });
 
   it('renders Channels / Movies / Series result rails when the query is set', async () => {
@@ -1218,7 +1147,6 @@ describe('Search', () => {
     await view.setQuery('bravo');
     resolveAlpha({
       channels: { indices: [0], hasMore: false },
-      programmes: { indices: [], hasMore: false },
       movies: { indices: [], hasMore: false },
       series: { indices: [], hasMore: false },
     });
@@ -1513,7 +1441,7 @@ describe('Search', () => {
     expect(container.textContent).not.toContain('Preparing search…');
     expect(container.querySelector('.catalog-tile[data-channel-index="0"]')).not.toBeNull();
     const [ready] = diagEvents(info, 'search.index.ready');
-    expect(ready).toMatch(/mode=fallback channels=1 programmes=0 items=1 persisted=0 built=0 posted=2/);
+    expect(ready).toMatch(/mode=fallback channels=1 items=1 persisted=0 built=0 posted=2/);
     expect(Number(ready.match(/hintMs=(\d+)/)?.[1])).toBeGreaterThanOrEqual(40);
     info.mockRestore();
   });
@@ -1676,7 +1604,6 @@ describe('Search', () => {
       await indexReady(view);
       expect(diagEvents(warn, 'search.index.lost')).toEqual([
         expect.stringMatching(/source=channels reason=rejected$/),
-        expect.stringMatching(/source=programmes reason=rejected$/),
       ]);
     } finally {
       warn.mockRestore();
@@ -1686,14 +1613,13 @@ describe('Search', () => {
 
   it('runs one rebuild of a lost index for queries typed while it runs', async () => {
     playlistMock.channels = [chan('Alpha')];
-    epgMock.programmes = { Alpha: [prog('Evening Report', Date.now() + 3600000, Date.now() + 7200000)] };
     const run = workerMock.run.getMockImplementation()!;
     let rejected = false;
     const held: Array<() => void> = [];
     let resets = 0;
     workerMock.run.mockImplementation(async (task: string, payload: unknown) => {
       const request = payload as SearchIndexRequest;
-      if (!rejected && request.chunk?.source === 'programmes') {
+      if (!rejected && request.chunk?.source === 'channels') {
         rejected = true;
         return { accepted: false };
       }
@@ -1706,17 +1632,17 @@ describe('Search', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
       const view = new Search(container, mkHandlers());
-      await view.open(null, 'report');
+      await view.open(null, 'alpha');
       await vi.waitFor(() => expect(held).toHaveLength(1));
-      void view.setQuery('evening');
-      void view.setQuery('evening report');
+      void view.setQuery('alp');
+      void view.setQuery('alpha');
       await new Promise(resolve => setTimeout(resolve, 30));
       expect(resets).toBe(1);
       expect((view as unknown as { workerIndexReady: boolean }).workerIndexReady).toBe(false);
 
       held.splice(0).forEach(release => release());
-      await vi.waitFor(() => expect(container.querySelector('.search-program-row')?.textContent)
-        .toContain('Evening Report'));
+      await vi.waitFor(() => expect(container.querySelector('.search-channel-row')?.textContent)
+        .toContain('Alpha'));
       expect(resets).toBe(1);
       expect((view as unknown as { workerIndexReady: boolean }).workerIndexReady).toBe(true);
       await view.setQuery('alpha');
@@ -1727,26 +1653,6 @@ describe('Search', () => {
       warn.mockRestore();
       workerMock.run.mockImplementation(run);
     }
-  });
-
-  it('runs one recovery when a program refresh settles the last pending source', async () => {
-    playlistMock.channels = [chan('Alpha')];
-    const { view } = await openWith();
-    await view.setQuery('report');
-    const internals = view as unknown as { pendingIndex: unknown; workerIndexLost: boolean };
-    internals.pendingIndex = { channels: false, programmes: true, catalog: false };
-    internals.workerIndexLost = true;
-    epgMock.programmes = { Alpha: [prog('Late Report', Date.now() + 3600000, Date.now() + 7200000)] };
-    workerMock.run.mockClear();
-
-    await view.refreshPrograms();
-    await vi.waitFor(() => expect(container.querySelector('.search-program-row')?.textContent)
-      .toContain('Late Report'));
-    await new Promise(resolve => setTimeout(resolve, 50));
-    const calls = workerMock.run.mock.calls;
-    expect(calls.filter(([task, payload]) => task === 'search.index'
-      && (payload as SearchIndexRequest).reset)).toHaveLength(1);
-    expect(calls.filter(([task]) => task === 'search.query')).toHaveLength(1);
   });
 
   it('focuses a result that appears only once the catalog loads', async () => {
@@ -1819,21 +1725,14 @@ describe('Search', () => {
     expect(storageMock.addSearchHistory).toHaveBeenCalledWith('  one ');
   });
 
-  it('indexes channels, programmes, and the catalog from IndexedDB records', async () => {
+  it('indexes channels and the catalog from IndexedDB records', async () => {
     const source = [chan('Bravo'), chan('Alpha')];
     const alpha = { ...source[1], name: 'Alpha Prime', sourceName: 'Alpha' };
     playlistMock.channels = [alpha];
-    const programmes = [prog('Evening Report', Date.now() + 3600000, Date.now() + 7200000)];
-    epgMock.programmes = { Alpha: programmes };
     const movies = [vod('10', 'Alpha Movie'), vod('11', 'Bravo Movie')];
     const playlistRef = { store: 'playlist-cache', key: 'k', timestamp: 1 };
-    const epgRef = { url: 'http://host/epg.xml', id: 'Alpha', timestamp: 2 };
     const vodRef = { store: 'catalog-cache', key: 'x1|vod_all', timestamp: 3 };
     cacheMock.records.set('playlist-cache|k', { timestamp: 1, data: { channels: source } });
-    cacheMock.records.set('epg-cache|http://host/epg.xml', {
-      timestamp: 2,
-      data: { programmes: { Alpha: programmes } },
-    });
     cacheMock.records.set('catalog-cache|x1|vod_all', { timestamp: 3, data: movies });
     cacheMock.refs.set(movies, vodRef);
     playlistMock.getChannelCacheSource.mockReturnValue({
@@ -1841,25 +1740,21 @@ describe('Search', () => {
       length: 2,
       selection: new Uint32Array([1]),
     });
-    epgMock.programmeCacheOrigin.mockReturnValue(epgRef);
     const info = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     const { view } = await openWith({ vod: movies });
     expect(diagEvents(info, 'search.index.ready')).toEqual([expect.stringMatching(
-      /mode=cache channels=1 programmes=1 items=2 persisted=0 built=3 posted=0 elapsedMs=\d+ hintMs=0$/,
+      /mode=cache channels=1 items=2 persisted=0 built=2 posted=0 elapsedMs=\d+ hintMs=0$/,
     )]);
     const requests = workerMock.run.mock.calls
       .filter(([task]) => task === 'search.index')
       .map(([, payload]) => payload as SearchIndexRequest);
     expect(requests.some(request => request.chunk && request.chunk.source !== 'series')).toBe(false);
     expect(requests.some(request => request.cachedChannels)).toBe(true);
-    expect(requests.some(request => request.cachedProgrammes)).toBe(true);
     expect(requests.some(request => request.cachedMovies)).toBe(true);
 
     await view.setQuery('prime');
     expect(container.textContent).toContain('Alpha Prime');
-    await view.setQuery('report');
-    expect(container.querySelector('.search-program-row')?.textContent).toContain('Alpha Prime');
     await view.setQuery('bravo');
     expect(container.textContent).toContain('Bravo Movie');
 
@@ -1873,7 +1768,7 @@ describe('Search', () => {
     await view.open(account);
     await indexReady(view);
     expect(diagEvents(info, 'search.index.ready')[1])
-      .toContain('mode=persisted channels=1 programmes=1 items=2 persisted=3 built=0 posted=0');
+      .toContain('mode=persisted channels=1 items=2 persisted=2 built=0 posted=0');
     info.mockRestore();
   });
 
@@ -1897,16 +1792,12 @@ describe('Search', () => {
     const info = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const channel = chan('Alpha');
     playlistMock.channels = [channel];
-    epgMock.programmes = {
-      Alpha: [prog('Evening Report', Date.now() + 3600000, Date.now() + 7200000)],
-    };
     cacheMock.records.set('playlist-cache|stale', { timestamp: 9, data: { channels: [channel] } });
     playlistMock.getChannelCacheSource.mockReturnValue({
       record: { store: 'playlist-cache', key: 'stale', timestamp: 1 },
       length: 1,
       selection: new Uint32Array([0]),
     });
-    epgMock.programmeCacheOrigin.mockReturnValue({ url: 'http://host/stale.xml', id: 'Alpha', timestamp: 2 });
 
     const { view } = await openWith();
     const posted = workerMock.run.mock.calls
@@ -1914,84 +1805,14 @@ describe('Search', () => {
       .map(([, payload]) => payload as SearchIndexRequest);
     expect(posted.some(request => request.chunk?.source === 'channels'
       && request.chunk.documents?.length === 1)).toBe(true);
-    expect(posted.some(request => request.chunk?.source === 'programmes'
-      && request.chunk.documents?.length === 1)).toBe(true);
     expect(diagEvents(info, 'search.worker.cache.fallback')).toEqual([
       expect.stringMatching(/source=channels reason=record_changed$/),
-      expect.stringMatching(/source=programmes reason=\w+$/),
     ]);
     expect(diagEvents(info, 'search.index.ready')[0]).toContain('mode=fallback');
 
-    await view.setQuery('report');
-    expect(container.querySelector('.search-program-row')?.textContent).toContain('Evening Report');
+    await view.setQuery('alpha');
+    expect(container.textContent).toContain('Alpha');
     info.mockRestore();
-  });
-
-  it('searches EPG program metadata and shows its channel and airtime', async () => {
-    const channel = chan('Alpha');
-    playlistMock.channels = [channel];
-    epgMock.programmes = { Alpha: [prog('Evening Report', Date.now() + 3600000, Date.now() + 7200000)] };
-    const { view } = await openWith();
-    await view.setQuery('report');
-    const row = container.querySelector('.search-program-row');
-    expect(row?.textContent).toContain('Evening Report');
-    expect(row?.textContent).toContain('Alpha');
-    expect(row?.textContent).toContain('Set reminder');
-  });
-
-  it('lets overlapping chunked program posts take turns instead of colliding', async () => {
-    const total = CONFIG.SEARCH.INDEX_CHUNK_SIZE * 2 + 5;
-    const start = Date.now() + 3600000;
-    playlistMock.channels = [chan('Alpha')];
-    epgMock.programmes = {
-      Alpha: Array.from({ length: total }, (_, i) => prog(`Show ${i}`, start + i * 60000, start + (i + 1) * 60000)),
-    };
-    const view = new Search(container, mkHandlers());
-    await view.open(null);
-    await indexReady(view);
-    const internals = view as unknown as {
-      workerSession: number;
-      postSource(sessionId: number, source: string, total: number, at: (i: number) => string[]): Promise<boolean>;
-    };
-    const sessionId = internals.workerSession;
-    const older = internals.postSource(sessionId, 'programmes', total, i => [`Old ${i}`]);
-    const newer = internals.postSource(sessionId, 'programmes', total, i => [`Show ${i}`]);
-
-    expect(await Promise.all([older, newer])).toEqual([true, true]);
-    await view.setQuery(`show ${total - 1}`);
-    expect(container.querySelector('.search-program-row')?.textContent).toContain(`Show ${total - 1}`);
-  });
-
-  it('runs a query typed while preparing once a program post is rejected', async () => {
-    playlistMock.channels = [chan('Alpha')];
-    epgMock.programmes = { Alpha: [prog('Evening Report', Date.now() + 3600000, Date.now() + 7200000)] };
-    const run = workerMock.run.getMockImplementation()!;
-    let rejected = false;
-    workerMock.run.mockImplementation(async (task: string, payload: unknown) => {
-      if (!rejected && (payload as SearchIndexRequest).chunk?.source === 'programmes') {
-        rejected = true;
-        return { accepted: false };
-      }
-      return run(task, payload);
-    });
-    try {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-      const info = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-      const view = new Search(container, mkHandlers());
-      await view.open(null, 'report');
-      await vi.waitFor(() => expect(container.querySelector('.search-program-row')?.textContent)
-        .toContain('Evening Report'));
-      expect(container.textContent).not.toContain('Preparing search…');
-      expect(diagEvents(warn, 'search.index.lost'))
-        .toEqual([expect.stringMatching(/source=programmes reason=rejected$/)]);
-      expect(diagEvents(info, 'search.index.ready')).toEqual([expect.stringContaining('mode=lost')]);
-      expect(diagEvents(info, 'search.worker.recovery.completed'))
-        .toEqual([expect.stringContaining('reason=lost')]);
-      warn.mockRestore();
-      info.mockRestore();
-    } finally {
-      workerMock.run.mockImplementation(run);
-    }
   });
 
   it('rebuilds an index whose catalog post failed and never reuses it', async () => {
@@ -2039,200 +1860,6 @@ describe('Search', () => {
     } finally {
       workerMock.run.mockImplementation(run);
     }
-  });
-
-  it('keeps preparing for a pending catalog after a program post fails, then shows it', async () => {
-    playlistMock.channels = [chan('Alpha')];
-    epgMock.programmes = { Alpha: [prog('Evening Report', Date.now() + 3600000, Date.now() + 7200000)] };
-    let finishVod: (value: unknown[]) => void = () => undefined;
-    catalogMock.loadAllVodStreams.mockReturnValue(new Promise(resolve => { finishVod = resolve; }));
-    catalogMock.loadAllSeries.mockResolvedValue([]);
-    const run = workerMock.run.getMockImplementation()!;
-    let rejected = false;
-    workerMock.run.mockImplementation(async (task: string, payload: unknown) => {
-      if (!rejected && (payload as SearchIndexRequest).chunk?.source === 'programmes') {
-        rejected = true;
-        return { accepted: false };
-      }
-      return run(task, payload);
-    });
-    try {
-      const view = new Search(container, mkHandlers());
-      void view.open(account, 'alpha');
-      await vi.waitFor(() => expect(rejected).toBe(true));
-      await new Promise(resolve => setTimeout(resolve, 50));
-      expect(container.textContent).toContain('Preparing search…');
-      expect(container.textContent).not.toContain('No results found.');
-
-      finishVod([vod('10', 'Alpha Movie')]);
-      await vi.waitFor(() => expect(container.textContent).toContain('Alpha Movie'));
-      expect(container.textContent).toContain('Evening Report');
-    } finally {
-      workerMock.run.mockImplementation(run);
-    }
-  });
-
-  it('recovers program results when a refresh loses its worker post', async () => {
-    playlistMock.channels = [chan('Alpha')];
-    const { view } = await openWith();
-    await view.setQuery('report');
-    epgMock.programmes = { Alpha: [prog('Late Report', Date.now() + 3600000, Date.now() + 7200000)] };
-    const run = workerMock.run.getMockImplementation()!;
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    let crashed = false;
-    workerMock.run.mockImplementation(async (task: string, payload: unknown) => {
-      if (!crashed && (payload as SearchIndexRequest).chunk?.source === 'programmes') {
-        crashed = true;
-        throw new Error('worker crashed');
-      }
-      return run(task, payload);
-    });
-    try {
-      await view.refreshPrograms();
-      await vi.waitFor(() => expect(container.querySelector('.search-program-row')?.textContent)
-        .toContain('Late Report'));
-    } finally {
-      workerMock.run.mockImplementation(run);
-      error.mockRestore();
-    }
-  });
-
-  it('refreshes program results when EPG finishes loading after Search opens', async () => {
-    const channel = chan('Alpha');
-    playlistMock.channels = [channel];
-    const { view } = await openWith();
-    await view.setQuery('report');
-    expect(container.querySelector('.search-program-row')).toBeNull();
-
-    epgMock.programmes = { Alpha: [prog('Late Report', Date.now() + 3600000, Date.now() + 7200000)] };
-    await view.refreshPrograms();
-    expect(container.querySelector('.search-program-row')?.textContent).toContain('Late Report');
-  });
-
-  it('refreshes a query typed while the initial program index is building', async () => {
-    const channel = chan('Alpha');
-    playlistMock.channels = [channel];
-    epgMock.programmes = {
-      Alpha: [prog('Late Report', Date.now() + 3600000, Date.now() + 7200000)],
-    };
-    catalogMock.loadAllVodStreams.mockResolvedValue([]);
-    catalogMock.loadAllSeries.mockResolvedValue([]);
-    const view = new Search(container, mkHandlers());
-
-    const opening = view.open(account);
-    await view.setQuery('report');
-    await opening;
-
-    expect(container.querySelector('.search-program-row')?.textContent)
-      .toContain('Late Report');
-  });
-
-  it('does not build the program index until Search opens', async () => {
-    const channel = chan('Alpha');
-    playlistMock.channels = [channel];
-    epgMock.programmes = {
-      Alpha: [prog('Late Report', Date.now() + 3600000, Date.now() + 7200000)],
-    };
-    const view = new Search(container, mkHandlers());
-
-    await view.refreshPrograms();
-    expect(epgMock.findChannelId).not.toHaveBeenCalled();
-
-    catalogMock.loadAllVodStreams.mockResolvedValue([]);
-    catalogMock.loadAllSeries.mockResolvedValue([]);
-    await view.open(null);
-    expect(epgMock.findChannelId).toHaveBeenCalledWith(channel);
-  });
-
-  it('plays a current program and starts catch-up for an aired program', async () => {
-    const now = Date.now();
-    const liveChannel = chan('Alpha');
-    const catchupChannel = { ...chan('Bravo'), catchupSource: '{utc}' };
-    playlistMock.channels = [liveChannel, catchupChannel];
-    epgMock.programmes = {
-      Alpha: [prog('Live Report', now - 60000, now + 60000)],
-      Bravo: [prog('Past Report', now - 120000, now - 60000)],
-    };
-    const { view, handlers } = await openWith();
-    await view.setQuery('report');
-
-    const rows = container.querySelectorAll<HTMLElement>('.search-program-row');
-    rows[0].dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
-    view.handleAction('select');
-    expect(handlers.onPlayChannel).toHaveBeenCalledWith(0, undefined);
-
-    rows[1].dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
-    view.handleAction('select');
-    expect(handlers.onPlayChannel).toHaveBeenCalledWith(1, expect.objectContaining({ title: 'Past Report' }));
-  });
-
-  it('offers resume or start over for a partially watched catch-up program', async () => {
-    const now = Date.now();
-    const start = now - 120000;
-    const channel = { ...chan('Alpha'), catchupSource: '{utc}' };
-    playlistMock.channels = [channel];
-    epgMock.programmes = { Alpha: [prog('Past Report', start, now - 60000)] };
-    storageMock.getCatchupProgressList.mockReturnValue([{
-      channelKey: 'key',
-      progStart: start,
-      progEnd: now - 60000,
-      position: 30,
-      duration: 60,
-      updatedAt: now,
-      completed: false,
-    }]);
-    const { view, handlers } = await openWith();
-    await view.setQuery('past');
-    const row = container.querySelector('.search-program-row') as HTMLElement;
-    row.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
-    view.handleAction('select');
-    expect(document.querySelector('.catchup-resume-prompt')?.classList.contains('hidden')).toBe(false);
-    expect(storageMock.addSearchHistory).not.toHaveBeenCalled();
-
-    view.handleAction('select');
-    expect(handlers.onPlayChannel).toHaveBeenCalledWith(0, expect.objectContaining({ resumeSecs: 30 }));
-    expect(storageMock.addSearchHistory).toHaveBeenCalledWith('past');
-  });
-
-  it('does not play an Xtream program whose has_archive flag is false', async () => {
-    const now = Date.now();
-    const channel = {
-      ...chan('Alpha'),
-      catchupSource: '{utc}',
-      catchupAccountId: 'x1',
-      catchupStreamId: '101',
-    };
-    playlistMock.channels = [channel];
-    epgMock.programmes = { Alpha: [prog('Past Report', now - 120000, now - 60000)] };
-    archiveMock.load.mockResolvedValue(new Set());
-    archiveMock.isAvailable.mockReturnValue(false);
-    const { view, handlers } = await openWith();
-    await view.setQuery('past');
-    const row = container.querySelector('.search-program-row') as HTMLElement;
-    row.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
-    view.handleAction('select');
-    await Promise.resolve();
-
-    expect(handlers.onPlayChannel).not.toHaveBeenCalled();
-    expect(toastMock).toHaveBeenCalledWith("This program isn't available for catch-up.");
-    expect(storageMock.addSearchHistory).not.toHaveBeenCalled();
-  });
-
-  it('toggles a reminder for a future program', async () => {
-    const now = Date.now();
-    const channel = chan('Alpha');
-    playlistMock.channels = [channel];
-    epgMock.programmes = { Alpha: [prog('Future Report', now + 60000, now + 120000)] };
-    const { view } = await openWith();
-    await view.setQuery('future');
-    const row = container.querySelector('.search-program-row') as HTMLElement;
-    row.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
-    view.handleAction('select');
-    expect(reminderMock.add).toHaveBeenCalledWith(expect.objectContaining({
-      channelName: 'Alpha',
-      title: 'Future Report',
-    }));
-    expect(storageMock.addSearchHistory).not.toHaveBeenCalled();
   });
 
   it('opens an Xtream movie result on a pointer click', async () => {
@@ -2341,7 +1968,7 @@ describe('Search', () => {
     await p1;
 
     await view.setQuery('movie');
-    expect(container.textContent).toContain('Bravo Movie');
+    await vi.waitFor(() => expect(container.textContent).toContain('Bravo Movie'));
     expect(container.textContent).not.toContain('Alpha Movie');
   });
 
@@ -2371,7 +1998,7 @@ describe('Search', () => {
     await view.open(account);
     await view.setQuery('movie');
 
-    expect(container.textContent).toContain('Alpha Movie');
+    await vi.waitFor(() => expect(container.textContent).toContain('Alpha Movie'));
   });
 });
 

@@ -9,7 +9,6 @@ vi.mock('../services/idb-cache', () => ({
 import {
   cachedChannelsRequest,
   cachedNamesRequest,
-  ProgrammeRuns,
   sampleDocuments,
   selectCatalogItems,
 } from './search-cache-source';
@@ -87,29 +86,4 @@ describe('search cache sources', () => {
     expect(cachedNamesRequest(items, items, null)).toBeNull();
   });
 
-  it('builds programme runs only when every run is cached consistently', () => {
-    const origin = { url: 'http://host/epg', id: 'e1', timestamp: 3 };
-    const samples = sampleDocuments(0, () => []);
-    const runs = new ProgrammeRuns();
-    runs.add(0, origin, 2);
-    runs.add(2, { ...origin, id: 'e2' }, 1);
-    expect(runs.request(samples)).toEqual({
-      records: [{ store: 'epg-cache', key: 'http://host/epg', timestamp: 3 }],
-      runChannels: new Uint32Array([0, 2]),
-      runRecords: new Uint32Array([0, 0]),
-      runIds: ['e1', 'e2'],
-      runCounts: new Uint32Array([2, 1]),
-      samples,
-    });
-
-    const uncached = new ProgrammeRuns();
-    uncached.add(0, origin, 2);
-    uncached.add(1, null, 1);
-    expect(uncached.request(samples)).toBeNull();
-
-    const mixed = new ProgrammeRuns();
-    mixed.add(0, origin, 2);
-    mixed.add(1, { ...origin, timestamp: 4 }, 1);
-    expect(mixed.request(samples)).toBeNull();
-  });
 });

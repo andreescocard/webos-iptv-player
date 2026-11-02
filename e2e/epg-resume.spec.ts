@@ -1,4 +1,4 @@
-import { test, expect, type Page, routePlaylist, routeLiveManifest, LIVE_MANIFEST, enterTab } from './helpers';
+import { test, expect, type Page, routePlaylist, routeLiveManifest, LIVE_MANIFEST } from './helpers';
 
 // Catch-up resume markers + resume prompt. A fixed clock and a UTC device zone
 // keep wall-clock == absolute time so the past/live/future split is unambiguous.
@@ -181,29 +181,4 @@ test.describe('EPG catch-up resume prompt', () => {
     await expect(page.locator('#view-player')).toBeVisible();
     await expect(page.locator('.catchup-resume-prompt')).toBeHidden();
   });
-});
-
-test('a partial program opened from Search shows its resume prompt with the ring inside', async ({ page }) => {
-  await setup(page, partial);
-  await page.goto('/');
-  await expect(page.locator('#view-channels')).toBeVisible();
-  await enterTab(page, 'search');
-  await page.locator('.tab-bar-search-input').fill('earlier');
-  const result = page.locator('#view-search .search-program-row').filter({ hasText: 'Earlier Show' });
-  await page.locator('.tab-bar-search-input').press('ArrowDown');
-  await expect(result).toHaveClass(/\bfocused\b/);
-  await page.keyboard.press('Enter');
-  const prompt = page.locator('.catchup-resume-prompt');
-  await expect(prompt).toBeVisible();
-
-  await page.keyboard.press('ArrowRight');
-  await expect(prompt.locator('.catchup-resume-btn[data-action="start-over"]')).toHaveClass(/\bfocused\b/);
-  await expect(page.locator('#view-search .focused')).toHaveCount(0);
-  await page.keyboard.press('ArrowRight');
-  await page.keyboard.press('Enter');
-  await expect(prompt).toBeHidden();
-  await expect(page.locator('#view-search')).toBeVisible();
-  await expect(page.locator('#view-player')).toBeHidden();
-  await expect(result).toHaveClass(/\bfocused\b/);
-  await expect(page.locator('.focused:visible')).toHaveCount(1);
 });

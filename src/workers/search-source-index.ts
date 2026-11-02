@@ -1,7 +1,6 @@
 import {
   cacheRecordTimestamp,
   CATALOG_STORE,
-  EPG_STORE,
   PLAYLIST_STORE,
 } from '../services/idb-schema';
 import { foldSearchText } from '../utils/channel-search';
@@ -27,16 +26,12 @@ export interface SourceIndex {
   fields: number;
   text: string;
   ends: Uint32Array;
-  /** EPG only: each channel id's programme count, in record order. */
-  runIds?: string[];
-  runCounts?: Uint32Array;
 }
 
 type Fields = Record<string, unknown>;
 
 const FIELDS: Record<SearchCacheRecord['store'], number> = {
   [PLAYLIST_STORE]: 2,
-  [EPG_STORE]: 3,
   [CATALOG_STORE]: 1,
 };
 
@@ -69,8 +64,6 @@ export function buildSourceIndex(ref: SearchCacheRecord, raw: CachedRecord | nul
   const data: unknown = raw.data;
   const values: string[] = [];
   let length = 0;
-  let runIds: string[] | undefined;
-  let runCounts: number[] | undefined;
   if (ref.store === PLAYLIST_STORE) {
     const channels = listOf(data && (data as Fields).channels);
     for (const item of channels) {
@@ -81,25 +74,6 @@ export function buildSourceIndex(ref: SearchCacheRecord, raw: CachedRecord | nul
       );
     }
     length = channels.length;
-  } else if (ref.store === EPG_STORE) {
-    const programmes = fieldsOf(data && (data as Fields).programmes);
-    runIds = [];
-    runCounts = [];
-    for (const id in programmes) {
-      if (!Object.prototype.hasOwnProperty.call(programmes, id)) continue;
-      const list = listOf(programmes[id]);
-      for (const item of list) {
-        const programme = fieldsOf(item);
-        values.push(
-          foldSearchText(text(programme.title)),
-          foldSearchText(text(programme.category)),
-          foldSearchText(text(programme.description)),
-        );
-      }
-      runIds.push(id);
-      runCounts.push(list.length);
-      length += list.length;
-    }
   } else {
     const items = listOf(data);
     for (const item of items) values.push(foldSearchText(text(fieldsOf(item).name)));
@@ -123,10 +97,6 @@ export function buildSourceIndex(ref: SearchCacheRecord, raw: CachedRecord | nul
     text: values.join(''),
     ends,
   };
-  if (runIds && runCounts) {
-    index.runIds = runIds;
-    index.runCounts = new Uint32Array(runCounts);
-  }
   return index;
 }
 
@@ -149,16 +119,6 @@ export function parseSourceIndex(ref: SearchCacheRecord, raw: CachedRecord | nul
       || (index.ends.length ? index.ends[index.ends.length - 1] : 0) !== index.text.length) {
     return null;
   }
-  if (ref.store === EPG_STORE) {
-    const { runIds, runCounts } = index;
-    if (!Array.isArray(runIds) || !(runCounts instanceof Uint32Array)
-        || runIds.length !== runCounts.length) {
-      return null;
-    }
-    let total = 0;
-    for (let i = 0; i < runCounts.length; i++) total += runCounts[i];
-    if (total !== index.length) return null;
-  }
   return {
     key: index.key,
     prefix: sourceIndexPrefix(ref.store, ref.key),
@@ -170,7 +130,6 @@ export function parseSourceIndex(ref: SearchCacheRecord, raw: CachedRecord | nul
     fields,
     text: index.text,
     ends: index.ends,
-    ...(ref.store === EPG_STORE ? { runIds: index.runIds, runCounts: index.runCounts } : {}),
   };
 }
 
@@ -191,18 +150,10 @@ export function sourceIndexRecord(index: SourceIndex): CachedRecord {
     text: index.text,
     ends: index.ends,
   };
-  if (index.runIds && index.runCounts) {
-    record.runIds = index.runIds;
-    record.runCounts = index.runCounts;
-  }
   return record;
 }
 
 export function sourceIndexCandidate(index: SourceIndex): SearchIndexCandidate {
-  let bytes = 256 + index.text.length * 2 + index.ends.byteLength;
-  if (index.runIds && index.runCounts) {
-    for (const id of index.runIds) bytes += id.length * 2 + 8;
-    bytes += index.runCounts.byteLength;
-  }
+  const bytes = 256 + index.text.length * 2 + index.ends.byteLength;
   return { key: index.key, prefix: index.prefix, bytes };
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CONFIG } from '../config';
-import { cachedChannelsRequest, ProgrammeRuns, sampleDocuments } from '../components/search-cache-source';
+import { cachedChannelsRequest, sampleDocuments } from '../components/search-cache-source';
 import type { Channel } from '../types';
 import type { CachedRecord, SearchCacheKey, SearchCacheReader } from './search-cache-reader';
 import { SearchCacheError } from './search-cache-reader';
@@ -14,7 +14,6 @@ import type {
 
 interface PostedSources {
   channels?: string[][];
-  programmes?: string[][];
   movies?: string[];
   series?: string[];
 }
@@ -26,7 +25,7 @@ function post(index: SearchWorkerIndex, sessionId: number, sources: PostedSource
     if (!(response as { accepted?: boolean }).accepted) accepted = false;
   };
   if (reset) take(index.index({ sessionId, reset: true }));
-  for (const source of ['channels', 'programmes', 'movies', 'series'] as const) {
+  for (const source of ['channels', 'movies', 'series'] as const) {
     const documents = sources[source];
     if (!documents) continue;
     const named = source === 'movies' || source === 'series';
@@ -77,7 +76,6 @@ class MemoryReader implements SearchCacheReader {
 }
 
 const PLAYLIST_REF: SearchCacheRecord = { store: 'playlist-cache', key: 'combined', timestamp: 10 };
-const EPG_REF = { url: 'http://host/epg', timestamp: 20 };
 const VOD_REF: SearchCacheRecord = { store: 'catalog-cache', key: 'a|vod_all', timestamp: 30 };
 
 function channel(id: string, name: string, group: string): Channel {
@@ -93,20 +91,11 @@ const sourceChannels = [
   channel('ch5', 'Bravo Alpha', 'News'),
 ];
 
-const programmes: Record<string, Array<Record<string, string>>> = {
-  e1: [
-    { title: 'Alpha Report', category: 'News', description: 'Daily' },
-    { title: 'Evening', category: 'News', description: 'Alpha recap' },
-  ],
-  e3: [{ title: 'Feature', category: 'Film', description: 'Bravo story' }],
-};
-
 const vod = [{ name: 'Alpha Movie' }, { name: 'Hidden Alpha' }, { name: 'Bravo Movie' }];
 
 function reader(): MemoryReader {
   return new MemoryReader(new Map<string, CachedRecord>([
     ['playlist-cache|combined', { key: 'combined', timestamp: 10, data: { channels: sourceChannels } }],
-    ['epg-cache|http://host/epg', { url: EPG_REF.url, timestamp: 20, data: { programmes } }],
     ['catalog-cache|a|vod_all', { key: 'a|vod_all', timestamp: 30, data: vod }],
   ]));
 }
@@ -126,23 +115,6 @@ function postedDocuments(channels: Channel[]): string[][] {
   return channels.map(item => [item.name, item.group, item.sourceName ?? '']);
 }
 
-function programmeDocuments(channels: Channel[], ids: Array<string | null>): string[][] {
-  const documents: string[][] = [];
-  channels.forEach((item, index) => {
-    const id = ids[index];
-    for (const programme of id ? programmes[id] ?? [] : []) {
-      documents.push([
-        programme.title,
-        programme.category,
-        programme.description,
-        item.name,
-        item.group,
-      ]);
-    }
-  });
-  return documents;
-}
-
 function query(sessionId: number, text: string): SearchQueryRequest {
   return { sessionId, query: text, limit: 10, includeCatalog: true };
 }
@@ -156,14 +128,7 @@ function cachedNames(selection: Uint32Array | null, names: string[]): SearchCach
   };
 }
 
-const EPG_IDS: Array<string | null> = ['e5', 'e1', null, 'e3'];
-
 function cachedRequest(channels: Channel[], selection: Uint32Array): SearchIndexRequest {
-  const runs = new ProgrammeRuns();
-  const programmeDocs = programmeDocuments(channels, EPG_IDS);
-  // ch5 has no programmes in the record (e5 is absent), so no run.
-  runs.add(1, { url: EPG_REF.url, id: 'e1', timestamp: EPG_REF.timestamp }, 2);
-  runs.add(3, { url: EPG_REF.url, id: 'e3', timestamp: EPG_REF.timestamp }, 1);
   const cachedChannels = cachedChannelsRequest(channels, {
     record: PLAYLIST_REF,
     length: sourceChannels.length,
@@ -174,9 +139,6 @@ function cachedRequest(channels: Channel[], selection: Uint32Array): SearchIndex
   return {
     sessionId: 1,
     cachedChannels,
-    cachedProgrammes: runs.request(
-      sampleDocuments(programmeDocs.length, index => programmeDocs[index]),
-    ) ?? undefined,
     cachedMovies: cachedNames(new Uint32Array([0, 2]), movies),
   };
 }
@@ -186,12 +148,11 @@ describe('SearchWorkerIndex with cached documents', () => {
     vi.useRealTimers();
   });
 
-  it('clears failed programmes but keeps the previous catalog until its post lands', async () => {
+  it('keeps the previous catalog until its fallback post lands', async () => {
     const { channels, selection } = displayedChannels();
     const index = new SearchWorkerIndex(reader());
     post(index, 1, {
       channels: postedDocuments(channels),
-      programmes: [['Old Alpha', '', '', 'Old', '']],
       movies: ['Old Alpha Movie'],
       series: ['Old Alpha Series'],
     });
@@ -200,10 +161,6 @@ describe('SearchWorkerIndex with cached documents', () => {
 
     const indexed = index.index({
       sessionId: 1,
-      cachedProgrammes: {
-        ...request.cachedProgrammes!,
-        records: [{ ...request.cachedProgrammes!.records[0], timestamp: 21 }],
-      },
       cachedMovies: { ...request.cachedMovies!, record: changed },
       cachedSeries: { ...cachedNames(null, vod.map(item => item.name)), record: changed },
     });
@@ -211,81 +168,32 @@ describe('SearchWorkerIndex with cached documents', () => {
     const answered = index.query(query(1, 'alpha'));
 
     expect((await indexed).unresolved).toEqual([
-      { source: 'programmes', reason: 'record_changed' },
       { source: 'movies', reason: 'record_changed' },
       { source: 'series', reason: 'record_changed' },
     ]);
     const result = await answered;
-    expect(result?.programmes.indices).toEqual([]);
     // The page maps catalog indices onto the list it last saw indexed.
     expect(result?.movies.indices).toEqual([0]);
     expect(result?.series.indices).toEqual([0]);
     expect(result?.channels.indices.length).toBeGreaterThan(0);
   });
 
-  it('clears channels and programmes when the channel record fails', async () => {
+  it('clears channels when the channel record fails', async () => {
     const { channels, selection } = displayedChannels();
     const index = new SearchWorkerIndex(reader());
     post(index, 1, {
       channels: [['Old Alpha', '', '']],
-      programmes: [['Old Alpha', '', '', 'Old', '']],
     });
     const request = cachedRequest(channels, selection);
 
     const indexed = index.index({
       sessionId: 1,
       cachedChannels: { ...request.cachedChannels!, length: 6 },
-      cachedProgrammes: request.cachedProgrammes,
     });
     const answered = index.query(query(1, 'alpha'));
 
-    expect((await indexed).unresolved?.map(entry => entry.source)).toEqual(['channels', 'programmes']);
+    expect((await indexed).unresolved?.map(entry => entry.source)).toEqual(['channels']);
     expect((await answered)?.channels.indices).toEqual([]);
-    expect((await answered)?.programmes.indices).toEqual([]);
-  });
-
-  it('extracts each EPG record before reading the next one', async () => {
-    const { channels } = displayedChannels();
-    const memory = reader();
-    const second = { url: 'http://host/epg2', timestamp: 22 };
-    const record = (url: string, timestamp: number, data: object): CachedRecord => {
-      const raw: CachedRecord = { url, timestamp };
-      Object.defineProperty(raw, 'data', {
-        get: () => {
-          memory.log.push(`extract:${url}`);
-          return data;
-        },
-      });
-      return raw;
-    };
-    memory.records.set(
-      `epg-cache|${EPG_REF.url}`,
-      record(EPG_REF.url, EPG_REF.timestamp, { programmes: { e1: programmes.e1 } }),
-    );
-    memory.records.set(
-      `epg-cache|${second.url}`,
-      record(second.url, second.timestamp, { programmes: { e3: programmes.e3 } }),
-    );
-    const runs = new ProgrammeRuns();
-    runs.add(1, { url: EPG_REF.url, id: 'e1', timestamp: EPG_REF.timestamp }, 2);
-    runs.add(3, { url: second.url, id: 'e3', timestamp: second.timestamp }, 1);
-    const docs = programmeDocuments(channels, EPG_IDS);
-    const index = new SearchWorkerIndex(memory);
-    post(index, 1, { channels: postedDocuments(channels) });
-
-    expect(await index.index({
-      sessionId: 1,
-      cachedProgrammes: runs.request(sampleDocuments(docs.length, i => docs[i])) ?? undefined,
-    })).toMatchObject({ accepted: true, persist: [{}, {}] });
-    expect(memory.log).toEqual([
-      'read:index',
-      `read:${EPG_REF.url}`,
-      `extract:${EPG_REF.url}`,
-      'read:index',
-      `read:${second.url}`,
-      `extract:${second.url}`,
-    ]);
-    expect((await index.query(query(1, 'bravo')))?.programmes.indices).toEqual([2]);
   });
 
   it('gives up on the cache once the read budget is spent', async () => {
@@ -298,7 +206,6 @@ describe('SearchWorkerIndex with cached documents', () => {
 
     expect((await index.index(cachedRequest(channels, selection))).unresolved).toEqual([
       { source: 'channels', reason: 'read_timeout' },
-      { source: 'programmes', reason: 'channels_unresolved' },
       { source: 'movies', reason: 'read_timeout' },
     ]);
     expect(memory.reads).toBe(1);
@@ -310,7 +217,6 @@ describe('SearchWorkerIndex with cached documents', () => {
     const posted = new SearchWorkerIndex();
     post(posted, 1, {
       channels: postedDocuments(channels),
-      programmes: programmeDocuments(channels, EPG_IDS),
       movies: ['Alpha Movie', 'Bravo Movie'],
     });
 
@@ -318,7 +224,7 @@ describe('SearchWorkerIndex with cached documents', () => {
     cached.index({ sessionId: 1, reset: true });
     expect(await cached.index(cachedRequest(channels, selection))).toEqual({
       accepted: true,
-      loaded: { persisted: 0, built: 3 },
+      loaded: { persisted: 0, built: 2 },
       persist: expect.any(Array),
     });
 
@@ -350,7 +256,7 @@ describe('SearchWorkerIndex with cached documents', () => {
     expect(await index.index(request)).toEqual({
       accepted: true,
       unresolved: [{ source: 'movies', reason: 'record_changed' }],
-      loaded: { persisted: 0, built: 2 },
+      loaded: { persisted: 0, built: 1 },
       persist: expect.any(Array),
     });
     expect((await index.query(query(1, 'delta')))?.channels.indices).toEqual([0]);
@@ -369,26 +275,12 @@ describe('SearchWorkerIndex with cached documents', () => {
       accepted: true,
       unresolved: [
         { source: 'channels', reason: 'record_changed' },
-        { source: 'programmes', reason: 'channels_unresolved' },
       ],
       loaded: { persisted: 0, built: 2 },
       persist: expect.any(Array),
     });
     expect((await index.index(shuffled)).unresolved)
       .toEqual([{ source: 'movies', reason: 'sample_mismatch' }]);
-  });
-
-  it('rejects a programme run whose list no longer matches', async () => {
-    const { channels, selection } = displayedChannels();
-    const runs = new ProgrammeRuns();
-    runs.add(1, { url: EPG_REF.url, id: 'e1', timestamp: EPG_REF.timestamp }, 3);
-    const index = new SearchWorkerIndex(reader());
-    post(index, 1, { channels: postedDocuments(channels) });
-
-    expect((await index.index({
-      sessionId: 1,
-      cachedProgrammes: runs.request(sampleDocuments(0, () => [])) ?? undefined,
-    })).unresolved).toEqual([{ source: 'programmes', reason: 'record_changed' }]);
   });
 
   it('reports every source when the database is unavailable', async () => {
@@ -400,7 +292,6 @@ describe('SearchWorkerIndex with cached documents', () => {
 
     expect((await index.index(cachedRequest(channels, selection))).unresolved).toEqual([
       { source: 'channels', reason: 'upgrade_needed' },
-      { source: 'programmes', reason: 'channels_unresolved' },
       { source: 'movies', reason: 'upgrade_needed' },
     ]);
   });
@@ -451,7 +342,7 @@ describe('SearchWorkerIndex with persisted source indexes', () => {
     const response = await index.index(cachedRequest(channels, selection));
     const entries = (response.persist ?? [])
       .map(candidate => ({ key: candidate.key, prefix: candidate.prefix, fields: {} }));
-    expect(entries).toHaveLength(3);
+    expect(entries).toHaveLength(2);
     expect((await index.persist({ entries })).written).toEqual(entries.map(entry => entry.key));
   }
 
@@ -467,14 +358,13 @@ describe('SearchWorkerIndex with persisted source indexes', () => {
     const posted = new SearchWorkerIndex();
     post(posted, 1, {
       channels: postedDocuments(channels),
-      programmes: programmeDocuments(channels, EPG_IDS),
       movies: ['Alpha Movie', 'Bravo Movie'],
     });
 
     const cached = new SearchWorkerIndex(memory);
     cached.index({ sessionId: 1, reset: true });
     expect(await cached.index(cachedRequest(channels, selection)))
-      .toEqual({ accepted: true, loaded: { persisted: 3, built: 0 } });
+      .toEqual({ accepted: true, loaded: { persisted: 2, built: 0 } });
     expect(sourceReads(memory)).toEqual([]);
     for (const text of ['alpha', 'bravo', 'delta', 'favorites', 'sports', 'news', 'recap']) {
       expect(await cached.query(query(1, text))).toEqual(posted.query(query(1, text)));
@@ -610,7 +500,6 @@ describe('SearchWorkerIndex with persisted source indexes', () => {
     expect(await index.prewarm({
       sources: [
         { ...PLAYLIST_REF },
-        { store: 'epg-cache', key: EPG_REF.url, timestamp: EPG_REF.timestamp },
         { ...VOD_REF },
       ],
     })).toEqual({ persist: [] });

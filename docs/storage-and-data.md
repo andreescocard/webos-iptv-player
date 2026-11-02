@@ -163,7 +163,7 @@ eviction algorithm.
 | `stream-mime-cache` | `key` | `expiresAt`, `lastAccessedAt` | Normalized provider route mapped to detected MIME and probe time; accounted and evicted in the `catalog` category |
 | `subtitle-cache` | `key` | `expiresAt`, `lastAccessedAt` | Provider/result key and downloaded SRT, WebVTT, ASS, or SSA text |
 | `channel-health-cache` | `key` | `expiresAt`, `lastAccessedAt` | Per-channel healthy, suspect, or unavailable status from the latest stream check |
-| `search-index-cache` | `key` | `expiresAt`, `lastAccessedAt` | Folded Search text of one playlist, guide, or catalog cache record, keyed by source store, source key, source timestamp, and index format; one string plus `Uint32Array` offsets. Written by the app worker after the page reserves room; clearing a source store removes its indexes |
+| `search-index-cache` | `key` | `expiresAt`, `lastAccessedAt` | Folded Search text of one playlist or movie/series catalog cache record, keyed by source store, source key, source timestamp, and index format; one string plus `Uint32Array` offsets. Written by the app worker after the page reserves room; clearing a source store removes its indexes. Program-guide records are not indexed |
 | `cache-meta` | `category` | None | `{bytes, entries, updatedAt}` for `playlist`, `epg`, `catalog`, `subtitle`, `health`, `search`, and `total` |
 
 Known `catalog-cache` key families are:
@@ -224,7 +224,7 @@ invalidates a structurally valid but now unrelated parsed playlist.
 | Stream MIME probe | 7 days | Expired reads become misses; records participate in catalog LRU and accounting |
 | Downloaded subtitle | 30 days | An expired read becomes a miss and deletes the record |
 | Channel health result | 30 days | Expired results are discarded; a new health check replaces results for checked channels |
-| Search index | 7 days | Used only while its source record's key, timestamp, and the index format still match; otherwise rebuilt from the source record. Built ahead of Search while the UI is idle after startup and after each playlist, guide, catalog, or account change |
+| Search index | 7 days | Used only while its source record's key, timestamp, and the index format still match; otherwise rebuilt from the source record. Built ahead of Search while the UI is idle after startup and after each playlist, catalog, or account change |
 
 Reads update `lastAccessedAt` in a best-effort follow-up transaction. Failure to
 write this bookkeeping does not turn a valid cache hit into a miss.

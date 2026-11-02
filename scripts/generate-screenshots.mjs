@@ -1491,30 +1491,6 @@ try {
     await page.locator('.tab-bar-search-input').fill('or'); // matches channels, movies, series
     await page.locator('#view-search .catalog-rail-title').first().waitFor({ state: 'visible', timeout: 10_000 });
     await page.locator('#view-search .catalog-tile[data-stream-id]').first().waitFor({ state: 'visible', timeout: 10_000 });
-    await page.locator('#view-search .search-program-row', { hasText: 'Reminder set' })
-      .waitFor({ state: 'visible', timeout: 10_000 });
-    // Keep three program results (including the reminder one) — the rows are
-    // virtual cells now, so hiding one must also close its absolute slot.
-    await page.locator('#view-search .search-programs .search-virtual-list-cell').evaluateAll((cells) => {
-      const reminder = cells.find(
-        (cell) => cell.querySelector('.search-program-action')?.textContent === 'Reminder set');
-      if (!reminder) throw new Error('Search screenshot reminder result is missing');
-      const keep = [];
-      for (const cell of cells) {
-        if (cell !== reminder && keep.length < 2) keep.push(cell);
-      }
-      keep.push(reminder);
-      const stride = cells.length > 1
-        ? parseFloat(cells[1].style.top) - parseFloat(cells[0].style.top)
-        : reminder.getBoundingClientRect().height;
-      for (const cell of cells) cell.style.display = 'none';
-      keep.forEach((cell, i) => {
-        cell.style.display = '';
-        cell.style.top = `${i * stride}px`;
-      });
-      const spacer = cells[0].parentElement;
-      if (spacer) spacer.style.height = `${keep.length * stride}px`;
-    });
     await page.locator('.search-history-dropdown').evaluate((root, html) => {
       root.innerHTML = html;
       root.classList.remove('hidden', 'search-history-dropdown--menu');

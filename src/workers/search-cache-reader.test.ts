@@ -4,7 +4,6 @@ import {
   CATALOG_STORE,
   DB_NAME,
   DB_VERSION,
-  EPG_STORE,
   PLAYLIST_STORE,
   SEARCH_INDEX_STORE,
 } from '../services/idb-schema';
@@ -13,7 +12,7 @@ import { IdbSearchCacheReader, SearchCacheError } from './search-cache-reader';
 function openDb(
   factory: IDBFactory,
   version: number,
-  stores: string[] = [PLAYLIST_STORE, CATALOG_STORE, EPG_STORE],
+  stores: string[] = [PLAYLIST_STORE, CATALOG_STORE],
 ): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = factory.open(DB_NAME, version);
@@ -21,7 +20,7 @@ function openDb(
       const db = request.result;
       for (const store of stores) {
         if (db.objectStoreNames.contains(store)) continue;
-        db.createObjectStore(store, { keyPath: store === EPG_STORE ? 'url' : 'key' });
+        db.createObjectStore(store, { keyPath: 'key' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -120,19 +119,19 @@ describe('IdbSearchCacheReader', () => {
     const factory = new IDBFactory();
     const db = await openDb(factory, DB_VERSION);
     await put(db, CATALOG_STORE, { key: 'a|vod_all', timestamp: 5, data: [{ name: 'Alpha' }] });
-    await put(db, EPG_STORE, { url: 'http://host/a', timestamp: 6, data: { programmes: {} } });
+    await put(db, PLAYLIST_STORE, { key: 'combined', timestamp: 6, data: { channels: [] } });
     const transaction = vi.spyOn(FakeIDBDatabase.prototype, 'transaction');
     const reader = new IdbSearchCacheReader(factory);
 
     const catalog = await reader.read({ store: CATALOG_STORE, key: 'a|vod_all', timestamp: 5 }, TIMEOUT);
-    const epg = await reader.read({ store: EPG_STORE, key: 'http://host/a', timestamp: 6 }, TIMEOUT);
+    const playlist = await reader.read({ store: PLAYLIST_STORE, key: 'combined', timestamp: 6 }, TIMEOUT);
     const missing = await reader.read({ store: PLAYLIST_STORE, key: 'missing', timestamp: 1 }, TIMEOUT);
 
     expect(catalog?.data).toEqual([{ name: 'Alpha' }]);
-    expect(epg?.timestamp).toBe(6);
+    expect(playlist?.timestamp).toBe(6);
     expect(missing).toBeNull();
     expect(transaction.mock.calls.map(call => call[0]))
-      .toEqual([CATALOG_STORE, EPG_STORE, PLAYLIST_STORE]);
+      .toEqual([CATALOG_STORE, PLAYLIST_STORE, PLAYLIST_STORE]);
     db.close();
   });
 
@@ -221,7 +220,7 @@ describe('IdbSearchCacheReader', () => {
     const db = await openDb(factory, DB_VERSION, [PLAYLIST_STORE]);
     const reader = new IdbSearchCacheReader(factory);
 
-    expect(await reason(reader.read({ store: EPG_STORE, key: 'k', timestamp: 1 }, TIMEOUT)))
+    expect(await reason(reader.read({ store: CATALOG_STORE, key: 'k', timestamp: 1 }, TIMEOUT)))
       .toBe('store_missing');
     db.close();
   });

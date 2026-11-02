@@ -227,7 +227,6 @@ test('browse Movies, open a detail, and start playback', async ({ page }) => {
   await enterTab(page, 'movies');
   await expect(page.locator('#view-movies')).toBeVisible();
 
-  await expect(page.locator('#view-movies .catalog-rail-title')).toContainText('Cat A');
   await expect(page.locator('.catalog-tile[data-item-id="10"]')).toContainText('Movie One');
 
   // Focus the poster and open its detail. Dispatch an explicit bubbling
@@ -625,10 +624,14 @@ const gridFocus = (page: Page) => page.locator('#view-movies .catalog-grid .cata
 test.describe('Down from the tab bar resumes Movies as Up left it', () => {
   test('in a category grid', async ({ page }) => {
     await openCategoryGrid(page);
+    await page.keyboard.press('ArrowUp');
+    const controls = page.locator('#view-movies .catalog-sort .focused');
+    await expect(controls).toHaveCount(1);
+    const key = await controls.getAttribute('data-key');
     await upToTabBar(page);
     await page.keyboard.press('ArrowDown');
     await expect(page.locator('#view-movies .catalog-grid-title')).toHaveText('Cat A');
-    await expect(gridFocus(page)).toHaveAttribute('data-item-id', '101');
+    await expect(controls).toHaveAttribute('data-key', key!);
   });
 
   test('with the tile it left scrolled half out of view', async ({ page }) => {

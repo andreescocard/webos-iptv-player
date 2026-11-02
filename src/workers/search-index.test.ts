@@ -3,7 +3,6 @@ import { SearchWorkerIndex } from './search-index';
 
 interface PostedSources {
   channels?: string[][];
-  programmes?: string[][];
   movies?: string[];
   series?: string[];
 }
@@ -15,7 +14,7 @@ function post(index: SearchWorkerIndex, sessionId: number, sources: PostedSource
     if (!(response as { accepted?: boolean }).accepted) accepted = false;
   };
   if (reset) take(index.index({ sessionId, reset: true }));
-  for (const source of ['channels', 'programmes', 'movies', 'series'] as const) {
+  for (const source of ['channels', 'movies', 'series'] as const) {
     const documents = sources[source];
     if (!documents) continue;
     const named = source === 'movies' || source === 'series';
@@ -34,7 +33,6 @@ describe('SearchWorkerIndex', () => {
     const index = new SearchWorkerIndex();
     expect(post(index, 1, {
       channels: [['XAlpha', 'News'], ['Alpha', 'Drama']],
-      programmes: [['Evening Report', 'News'], ['Alpha Report', 'Drama']],
       movies: ['XAlpha Movie', 'Alpha Movie'],
       series: ['XAlpha Series', 'Alpha Series'],
     })).toBe(true);
@@ -46,7 +44,6 @@ describe('SearchWorkerIndex', () => {
       includeCatalog: true,
     })).toEqual({
       channels: { indices: [1, 0], hasMore: false },
-      programmes: { indices: [1], hasMore: false },
       movies: { indices: [1, 0], hasMore: false },
       series: { indices: [1, 0], hasMore: false },
     });

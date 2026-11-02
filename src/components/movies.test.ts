@@ -294,16 +294,6 @@ describe('Movies browse + grid', () => {
     });
   });
 
-  it('drops a category prefix the provider puts on every category', async () => {
-    const cats = [
-      { id: '1', name: 'Movies ∤ Alpha' }, { id: '2', name: 'Movies ∤ Bravo' },
-      { id: '3', name: 'Movies ∤ Charlie' },
-    ];
-    catalogMock.loadVodInfo.mockResolvedValue(null);
-    await openWith(cats, [vod('10', 'Movie One')]);
-    const titles = Array.from(container.querySelectorAll('.catalog-rail-title')).map((el) => el.textContent);
-    expect(titles).toEqual(['Alpha', 'Bravo', 'Charlie']);
-  });
 
   it('shows a Continue rail from the resume list', async () => {
     const { StorageService } = await import('../services/storage-service');

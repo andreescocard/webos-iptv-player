@@ -11,6 +11,8 @@
   </p>
 </div>
 
+Current version: **1.19.0** — [Release notes](CHANGELOG.md).
+
 ## Screenshots
 
 | Channel list | Live preview |
@@ -65,6 +67,9 @@
 - **Recently Watched** — return to recent live channels or resume partially watched catch-up programs
 - **Live preview** — keep live playback beside the channel list while browsing, with program info and quick controls
 - **Movies & Series** — browse an Xtream account's VOD catalogs, with Continue Watching (one card per series, moving on to the next episode) and account-scoped Watchlist rails
+- **Movie suggestions** — a random movie rated at least 7/10 from loaded categories appears above the Watchlist when entering Movies; opening a category shows a suggestion from that category, using the same banner layout as Series. Ratings come from the IPTV provider, not a verified IMDb lookup.
+- **Movie categories** — icon cards and a complete category index, including small catalogs. Explicitly service-labeled categories appear under Streaming; those labels do not confirm external availability. Category names remain readable across themes and at 150% text size.
+- **Movie sorting** — sort movies within a category by Original order, A–Z, Z–A, or Top rated, with unrated titles last. Hero actions, sorting controls, and posters are reachable with the remote and Magic Remote pointer.
 - **Automatic VOD queues** — continue through series episodes or remaining Watchlist movies, removing completed titles from the Watchlist
 - **Catch-up & Live DVR** — replay past programs, and pause / rewind / return to the live edge on live streams
 - **Parental controls** — lock Live TV groups, movie and series categories, or individual titles with a PIN, with adult groups suggested for locking; locked content can stay listed with a lock or be hidden, and you choose when the PIN is asked again
@@ -83,7 +88,7 @@
 
 **Navigation**
 
-- **Search** — across channels, EPG programs, movies, and series, with direct live, catch-up, and reminder actions; recent searches drop down under the search box for one-press repeat searches
+- **Search** — across channels, movies, and series, without indexing EPG programs; use the Guide for programs. Recent searches drop down under the search box for one-press repeat searches.
 - **Channel sidebar** — switch channels over the video with current-program info, organized by group
 - **Channel customization** — reorder, hide, rename, regroup, manage favorites, and correct per-channel EPG matching or timing
 - **Auto-play and genre group icons** for faster browsing

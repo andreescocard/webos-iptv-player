@@ -84,10 +84,10 @@ export type XMLTVWorkerChunk =
       chunks: number;
     };
 
-export type SearchIndexSource = 'channels' | 'programmes' | 'movies' | 'series';
+export type SearchIndexSource = 'channels' | 'movies' | 'series';
 
 export interface SearchCacheRecord {
-  store: 'playlist-cache' | 'epg-cache' | 'catalog-cache';
+  store: 'playlist-cache' | 'catalog-cache';
   key: string;
   timestamp: number;
 }
@@ -110,19 +110,6 @@ export interface SearchCachedChannels {
   samples: SearchDocumentSamples;
 }
 
-/**
- * Programme documents read from epg-cache records: each run is one channel's
- * programme list, joined with that channel document's name and group.
- */
-export interface SearchCachedProgrammes {
-  records: SearchCacheRecord[];
-  runChannels: Uint32Array;
-  runRecords: Uint32Array;
-  runIds: string[];
-  runCounts: Uint32Array;
-  samples: SearchDocumentSamples;
-}
-
 /** Name documents read from a catalog-cache record. */
 export interface SearchCachedNames {
   record: SearchCacheRecord;
@@ -140,7 +127,7 @@ export interface SearchIndexChunk {
   source: SearchIndexSource;
   start: number;
   total: number;
-  /** Channel or programme field lists. */
+  /** Channel field lists. */
   documents?: string[][];
   /** Movie or series names. */
   names?: string[];
@@ -151,7 +138,6 @@ export interface SearchIndexRequest {
   reset?: boolean;
   chunk?: SearchIndexChunk;
   cachedChannels?: SearchCachedChannels;
-  cachedProgrammes?: SearchCachedProgrammes;
   cachedMovies?: SearchCachedNames;
   cachedSeries?: SearchCachedNames;
 }
@@ -226,7 +212,6 @@ export interface SearchRankedIndices {
 
 export interface SearchQueryResponse {
   channels: SearchRankedIndices;
-  programmes: SearchRankedIndices;
   movies: SearchRankedIndices;
   series: SearchRankedIndices;
 }

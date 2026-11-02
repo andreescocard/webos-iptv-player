@@ -16,10 +16,7 @@ import {
 import {
   cachedChannelDocuments,
   cachedNameDocuments,
-  cachedProgrammeRuns,
-  checkProgrammeRuns,
   foldDocuments,
-  joinProgrammeRuns,
 } from './search-cache-documents';
 import {
   SearchCacheError,
@@ -60,9 +57,6 @@ type ReadSource = (ref: SearchCacheKey) => Promise<CachedRecord | null>;
 export class SearchWorkerIndex {
   private sessionId: number | null = null;
   private channels: PreparedSearchItem<number>[] = [];
-  // Folded channel documents, which cached programme documents are joined with.
-  private channelDocuments: string[][] = [];
-  private programmes: PreparedSearchItem<number>[] = [];
   private movies = emptyNames();
   private series = emptyNames();
   private pending: Promise<void> | null = null;
@@ -133,8 +127,6 @@ export class SearchWorkerIndex {
       this.sessionId = request.sessionId;
       this.staging = {};
       this.channels = [];
-      this.channelDocuments = [];
-      this.programmes = [];
       this.movies = emptyNames();
       this.series = emptyNames();
     } else if (request.sessionId !== this.sessionId) {
@@ -142,7 +134,7 @@ export class SearchWorkerIndex {
     }
 
     if (request.chunk && !this.applyChunk(request.chunk)) return { accepted: false };
-    if (!request.cachedChannels && !request.cachedProgrammes
+    if (!request.cachedChannels
         && !request.cachedMovies && !request.cachedSeries) {
       return { accepted: true };
     }
@@ -175,40 +167,17 @@ export class SearchWorkerIndex {
       try {
         await build();
       } catch (error) {
-        // The page posts this source next; until then queries must not rank
-        // previous channels or programmes against its new rows.
-        if (source === 'channels' || source === 'programmes') this.clear(source);
+        // Do not rank previous channels against the page's new rows.
+        if (source === 'channels') this.clear(source);
         unresolved.push({ source, reason: failureReason(error) });
       }
     };
-    const { cachedChannels, cachedProgrammes, cachedMovies, cachedSeries } = request;
+    const { cachedChannels, cachedMovies, cachedSeries } = request;
     if (cachedChannels) {
       await resolve('channels', async () => {
         const documents = cachedChannelDocuments(await load(cachedChannels.record), cachedChannels);
-        this.channelDocuments = documents;
         this.channels = prepareFolded(documents);
       });
-    }
-    if (cachedProgrammes) {
-      if (unresolved.some(entry => entry.source === 'channels')) {
-        this.clear('programmes');
-        unresolved.push({ source: 'programmes', reason: 'channels_unresolved' });
-      } else {
-        await resolve('programmes', async () => {
-          checkProgrammeRuns(cachedProgrammes);
-          const runs: Array<string[][] | undefined> = [];
-          for (let record = 0; record < cachedProgrammes.records.length; record++) {
-            cachedProgrammeRuns(
-              await load(cachedProgrammes.records[record]),
-              record,
-              cachedProgrammes,
-              this.channelDocuments,
-              runs,
-            );
-          }
-          this.programmes = prepareFolded(joinProgrammeRuns(runs, cachedProgrammes));
-        });
-      }
     }
     if (cachedMovies) {
       await resolve('movies', async () => {
@@ -308,13 +277,12 @@ export class SearchWorkerIndex {
     }
   }
 
-  // Channels and programmes are empty from their first slice until their
-  // last, as the page already ranks against its new rows. The catalog keeps
+  // Channels clear from their first slice until their last. The catalog keeps
   // its previous names until the swap, which the page tracks per source.
   private applyChunk(chunk: SearchIndexChunk): boolean {
     const { source } = chunk;
     if (chunk.start === 0) {
-      if (source === 'channels' || source === 'programmes') this.clear(source);
+      if (source === 'channels') this.clear(source);
       this.staging[source] = { documents: [], names: [] };
     }
     const staged = this.staging[source];
@@ -329,7 +297,6 @@ export class SearchWorkerIndex {
     if (count + incoming.length < chunk.total) return true;
     delete this.staging[source];
     if (source === 'channels') this.setChannels(staged.documents);
-    else if (source === 'programmes') this.programmes = prepareFolded(foldDocuments(staged.documents));
     else if (source === 'movies') this.movies = foldedNames(staged.names.map(foldSearchText));
     else this.series = foldedNames(staged.names.map(foldSearchText));
     return true;
@@ -337,21 +304,18 @@ export class SearchWorkerIndex {
 
   private clear(source: SearchIndexSource): void {
     if (source === 'channels') this.setChannels([]);
-    else if (source === 'programmes') this.programmes = [];
     else if (source === 'movies') this.movies = emptyNames();
     else this.series = emptyNames();
   }
 
   private setChannels(documents: string[][]): void {
-    this.channelDocuments = foldDocuments(documents);
-    this.channels = prepareFolded(this.channelDocuments);
+    this.channels = prepareFolded(foldDocuments(documents));
   }
 
   private runQuery(request: SearchQueryRequest): SearchQueryResponse | null {
     if (request.sessionId !== this.sessionId) return null;
     return {
       channels: rankedFields(this.channels, request.query, request.limit),
-      programmes: rankedFields(this.programmes, request.query, request.limit),
       movies: request.includeCatalog
         ? rankedNames(this.movies, request.query, request.limit)
         : emptyResult(),

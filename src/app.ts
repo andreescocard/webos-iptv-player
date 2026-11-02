@@ -14,7 +14,7 @@ import {
 } from './services/idb-cache';
 import { SetupClient } from './services/setup-client';
 import { SearchIndexPrewarmer } from './services/search-index-store';
-import { CATALOG_STORE, EPG_STORE } from './services/idb-schema';
+import { CATALOG_STORE } from './services/idb-schema';
 import type { SearchPrewarmSource } from './workers/tasks';
 import { setServicePort } from './services/service-http';
 import { isLunaAvailable, lunaRequest, type LunaRequestHandle } from './services/luna';
@@ -148,9 +148,6 @@ class App {
           this.scheduleEpgReload();
         },
         onEpgMappingChanged: () => this.scheduleEpgReload(),
-        onEpgOffsetChanged: () => {
-          void this.search.refreshPrograms();
-        },
         onEnterPreview: () => this.livePreview?.focusControls() ?? false,
         authorizeEdit: proceed =>
           this.authorizeLiveEditing(t('settings.editChannelList'), proceed),
@@ -304,7 +301,7 @@ class App {
         if (this.tabBar.searchOpen) this.tabBar.focus();
         else this.goLive();
       },
-      onPlayChannel: (idx, catchup) => { this.tabBar.blur(); this.playChannel(idx, catchup); },
+      onPlayChannel: (idx) => { this.tabBar.blur(); this.playChannel(idx); },
       onOpenMovie: (account, vod) => {
         this.tabBar.blur();
         this.searchDetailViews.add('movies');
@@ -1061,7 +1058,6 @@ class App {
     this.player.closeSubtitleSearch(); // never let the subtitle overlay linger across a view change
     this.player.closeSubtitleOffset(); // never let the subtitle-sync overlay linger across a view change
     this.epgGrid.dismissPrompt(); // never let the catch-up prompt linger across a view change
-    this.search.dismissPrompt();
     this.settings.dismissPrompt();
     this.reminderManager.dismissPrompt();
     for (const [key, el] of Object.entries(this.views)) {
@@ -1259,8 +1255,6 @@ class App {
     this.applyDisplayTz();
     this.channelList.render();
     this.livePreview.refresh();
-    void this.search.refreshPrograms();
-    this.searchPrewarm.schedule('epg');
   }
 
   private openReminderManager(origin: 'settings' | 'epg'): void {
@@ -1354,9 +1348,6 @@ class App {
     const sources: SearchPrewarmSource[] = [];
     const playlist = PlaylistService.getChannelCacheSource()?.record;
     if (playlist) sources.push({ ...playlist });
-    for (const record of EpgService.getProgrammeCacheRecords()) {
-      sources.push({ store: EPG_STORE, key: record.url, timestamp: record.timestamp });
-    }
     const account = this.activeXtreamAccount();
     if (account) {
       sources.push(

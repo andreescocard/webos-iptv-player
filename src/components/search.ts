@@ -1,4 +1,4 @@
-import type { Action, CatchupInfo, Channel, PlaylistEntry, Programme, VodItem, SeriesItem } from '../types';
+import type { Action, Channel, PlaylistEntry, VodItem, SeriesItem } from '../types';
 import { SpatialNav, isFocusMove } from '../navigation/spatial-nav';
 import { Focus, type FocusScope } from '../navigation/focus-scope';
 import { html, raw } from '../utils/dom';
@@ -6,10 +6,7 @@ import { channelLockBadge, seriesLockBadge, vodLockBadge } from './parental-badg
 import { morph } from '../utils/morph';
 import { lazySrc } from '../utils/lazy-images';
 import { PlaylistService } from '../services/playlist-service';
-import { EpgService } from '../services/epg-service';
-import { ReminderService } from '../services/reminder-service';
 import { StorageService } from '../services/storage-service';
-import { XtreamArchiveService } from '../services/xtream-archive';
 import { persistSearchIndexes } from '../services/search-index-store';
 import {
   getCatalogFill,
@@ -21,20 +18,13 @@ import {
 } from '../services/xtream-catalog';
 import {
   prepareNameSearchItems,
-  prepareSearchItems,
   rankPreparedNamesTopK,
-  rankPreparedTopK,
 } from '../utils/channel-search';
-import { channelKey, legacyChannelKey } from '../utils/channel';
-import { formatDayLabel, formatTime } from '../utils/time';
-import { showToast } from './toast';
-import { CatchupResumePrompt } from './catchup-resume-prompt';
 import { CONFIG } from '../config';
 import { createLogger } from '../utils/logger';
 import { t } from '../i18n';
 import { VirtualList } from '../utils/virtual-list';
 import { VirtualScrollGuard, type VirtualScrollAxis } from '../utils/virtual-scroll';
-import { runInFrameSlices } from '../utils/frame-slices';
 import {
   appWorkerGeneration,
   retainAppWorker,
@@ -58,8 +48,6 @@ import {
   cachedChannelsRequest,
   cachedNamesRequest,
   channelDocument,
-  ProgrammeRuns,
-  sampleDocuments,
   selectCatalogItems,
 } from './search-cache-source';
 
@@ -74,25 +62,9 @@ export interface SearchHandlers {
   // A result arrived after the remote waited in the box: let it go.
   onReleaseTabBar: () => void;
   onBack: () => void;
-  onPlayChannel: (index: number, catchup?: CatchupInfo) => void;
+  onPlayChannel: (index: number) => void;
   onOpenMovie: (account: PlaylistEntry, vod: VodItem) => void;
   onOpenSeries: (account: PlaylistEntry, series: SeriesItem) => void;
-}
-
-interface ProgramResult {
-  channel: Channel;
-  channelIndex: number;
-  programme: Programme;
-}
-
-function programDocument(result: ProgramResult): string[] {
-  return [
-    result.programme.title,
-    result.programme.category,
-    result.programme.description,
-    result.channel.name,
-    result.channel.group,
-  ];
 }
 
 type CatalogLoadResult<T> =
@@ -107,7 +79,6 @@ interface CatalogSources {
 // Sources still on their way to the worker in this session.
 interface PendingIndex {
   channels: boolean;
-  programmes: boolean;
   catalog: boolean;
 }
 
@@ -140,7 +111,7 @@ function sameCatalogSource(left: SearchCachedNames | null, right: SearchCachedNa
   return true;
 }
 
-// The Search section: one query box over Channels / Programs / Movies / Series.
+// The Search section: one query box over Channels / Movies / Series.
 // Results are relevance-ranked and capped; movies and series match the account's
 // full catalogs, loaded once on open and cached.
 // Up from the box reveals the tab bar; Back returns to Live. The global key
@@ -153,24 +124,17 @@ export class Search {
   private query = '';
   private allVod: VodItem[] = [];
   private allSeries: SeriesItem[] = [];
-  private programIndex: ProgramResult[] = [];
-  private programRuns = new ProgrammeRuns();
   // The catalog-cache selections behind allVod / allSeries, when available.
   private vodCache: SearchCachedNames | null = null;
   private seriesCache: SearchCachedNames | null = null;
   // The channel list whose documents the worker holds in this session.
   private workerChannels: Channel[] | null = null;
-  private indexedChannels: Channel[] | null = null;
-  private indexedProgrammes: Record<string, Programme[]> | null = null;
   private loadedFor: string | null = null;
   private catalogExpiresAt = 0;
   private visibleChannels: Channel[] = [];
-  private visiblePrograms: ProgramResult[] = [];
   private visibleMovies: VodItem[] = [];
   private visibleSeries: SeriesItem[] = [];
-  private resumePrompt = new CatchupResumePrompt('prompt.search');
   private readonly channelListVirtualizer = this.createVirtualizer(88, SEARCH_ROW_OVERSCAN, SEARCH_LIST_VIEWPORT);
-  private readonly programVirtualizer = this.createVirtualizer(109, SEARCH_ROW_OVERSCAN, SEARCH_LIST_VIEWPORT);
   private readonly channelRailVirtualizer = this.createVirtualizer(240, SEARCH_RAIL_OVERSCAN, SEARCH_RAIL_VIEWPORT);
   private readonly movieVirtualizer = this.createVirtualizer(240, SEARCH_RAIL_OVERSCAN, SEARCH_RAIL_VIEWPORT);
   private readonly seriesVirtualizer = this.createVirtualizer(240, SEARCH_RAIL_OVERSCAN, SEARCH_RAIL_VIEWPORT);
@@ -189,7 +153,6 @@ export class Search {
   // Until every source is indexed, queries wait and the results show a hint.
   private pendingIndex: PendingIndex | null = null;
   private active = false;
-  private programIndexGeneration = 0;
   private resultLimit: number = CONFIG.SEARCH.INITIAL_RESULTS;
   private hasMoreResults = false;
   private workerSession = 0;
@@ -217,7 +180,6 @@ export class Search {
   private sourcePosts: Partial<Record<SearchIndexSource, SourcePost>> = {};
   private sourcePostId = 0;
   private workerIndexedChannels: Channel[] | null = null;
-  private workerIndexedProgrammes: Record<string, Programme[]> | null = null;
   private workerIndexedAccountId: string | null = null;
   private workerIndexedGeneration: number | null = null;
   private workerResetGeneration: number | null = null;
@@ -310,7 +272,7 @@ export class Search {
     this.query = query;
     this.resultLimit = CONFIG.SEARCH.INITIAL_RESULTS;
     if (!reuseWorkerIndex) {
-      this.pendingIndex = { channels: true, programmes: true, catalog: !!account };
+      this.pendingIndex = { channels: true, catalog: !!account };
       this.clearResults();
     }
     this.render();
@@ -357,16 +319,16 @@ export class Search {
       });
     }
     try {
-      await this.indexChannelsAndProgrammes(sessionId, workerReset);
+      await this.indexChannels(sessionId, workerReset);
     } catch (error) {
       if (sessionId !== this.workerSession) return;
       // Queries rebuild a lost index themselves; don't leave the hint up.
       log.error('Search index build failed', 'event=search.worker.index.failed', error);
-      this.indexLost(sessionId, 'error', 'channels', 'programmes');
+      this.indexLost(sessionId, 'error', 'channels');
     }
   }
 
-  private async indexChannelsAndProgrammes(
+  private async indexChannels(
     sessionId: number,
     workerReset: Promise<boolean>,
   ): Promise<void> {
@@ -384,13 +346,12 @@ export class Search {
       ? await this.indexWorkerFromCache({ sessionId, cachedChannels }, postChannels)
       : await postChannels();
     if (!channelsIndexed) {
-      this.indexLost(sessionId, 'rejected', 'channels', 'programmes');
+      this.indexLost(sessionId, 'rejected', 'channels');
       return;
     }
     if (!this.active || sessionId !== this.workerSession) return;
     this.workerChannels = channels;
     this.indexSettled(sessionId, 'channels');
-    this.programIndexDone(sessionId, await this.buildProgramIndex(false, sessionId));
   }
 
   /** The tab bar's search box drives the query; re-render the results for it. */
@@ -426,25 +387,6 @@ export class Search {
     });
   }
 
-  async refreshPrograms(): Promise<void> {
-    this.programIndexGeneration++;
-    this.indexedChannels = null;
-    this.indexedProgrammes = null;
-    if (!this.active) return;
-    const sessionId = this.workerSession;
-    // While sources are pending, the last one to settle runs the query.
-    const wasPending = !!this.pendingIndex;
-    try {
-      this.programIndexDone(sessionId, await this.buildProgramIndex(true, sessionId));
-    } catch (error) {
-      log.error('Search program index failed', 'event=search.worker.index.failed', 'scope=programmes', error);
-      this.indexLost(sessionId, 'error', 'programmes');
-    }
-    if (!wasPending && this.active && !this.pendingIndex && this.query.trim()) {
-      await this.startQuery(++this.queryGeneration);
-    }
-  }
-
   refreshLocks(): void {
     if (this.container.querySelector('.search-view')) this.render();
   }
@@ -473,14 +415,9 @@ export class Search {
     this.invalidateWorkerIndex();
   }
 
-  dismissPrompt(): void {
-    this.resumePrompt.hide();
-  }
-
   deactivate(): void {
     this.active = false;
     this.focusPending = false;
-    this.programIndexGeneration++;
     this.recoveryRetry = null;
     this.releaseWorker?.();
     this.releaseWorker = null;
@@ -489,10 +426,6 @@ export class Search {
 
   handleAction(action: Action): void {
     this.focusPending = false;
-    if (this.resumePrompt.visible) {
-      this.resumePrompt.handleAction(action);
-      return;
-    }
     if (isFocusMove(action) && this.nav.showConcealed()) return;
     if (this.moveVirtualFocus(action)) return;
     switch (action) {
@@ -641,12 +574,6 @@ export class Search {
     });
   }
 
-  // null: a newer program index build took over and settles instead.
-  private programIndexDone(sessionId: number, indexed: boolean | null): void {
-    if (indexed) this.indexSettled(sessionId, 'programmes');
-    else if (indexed === false) this.indexLost(sessionId, 'rejected', 'programmes');
-  }
-
   // The sources are settled but the worker may hold a partial index: the
   // first query after the last pending source rebuilds it whole.
   private indexLost(sessionId: number, reason: string, ...sources: Array<keyof PendingIndex>): void {
@@ -682,7 +609,6 @@ export class Search {
       `session=${String(this.workerSession)}`,
       `mode=${mode}`,
       `channels=${String(PlaylistService.channels.length)}`,
-      `programmes=${String(this.programIndex.length)}`,
       `items=${String(this.allVod.length + this.allSeries.length)}`,
       ...fields,
     );
@@ -700,7 +626,7 @@ export class Search {
     const pending = this.pendingIndex;
     if (!pending || sessionId !== this.workerSession) return;
     for (const source of sources) pending[source] = false;
-    if (pending.channels || pending.programmes || pending.catalog) return;
+    if (pending.channels || pending.catalog) return;
     this.pendingIndex = null;
     this.logIndexReady(this.indexMode());
     if (!this.workerIndexLost) this.markWorkerIndexReady(this.account);
@@ -726,8 +652,6 @@ export class Search {
       const channel = PlaylistService.channels[index];
       if (channel) rememberQuery(query, liveParentalRequest(channel));
       this.handlers.onPlayChannel(index);
-    } else if (el.dataset.programIndex !== undefined) {
-      void this.activateProgram(parseInt(el.dataset.programIndex, 10), query);
     } else if (this.account && el.dataset.streamId !== undefined) {
       const v = this.allVod.find((x) => x.streamId === el.dataset.streamId);
       if (!v) return;
@@ -839,7 +763,7 @@ export class Search {
     const range = virtualizer.getRange(items.length, viewport);
     return html`
       <div class="search-virtual-section ${
-        key === 'channels-list' ? 'search-channels' : key === 'programmes' ? 'search-programs' : ''
+        key === 'channels-list' ? 'search-channels' : ''
       }">
         <h2 class="catalog-rail-title">${title}</h2>
         <div class="search-virtual-scroll"
@@ -907,71 +831,6 @@ export class Search {
         <div class="catalog-tile-name">${s.name}</div>
       </div>
     `;
-  }
-
-  private async buildProgramIndex(force: boolean, sessionId: number): Promise<boolean | null> {
-    if (!force
-        && this.indexedChannels === PlaylistService.channels
-        && this.indexedProgrammes === EpgService.programmes) {
-      return this.indexProgrammes(sessionId);
-    }
-    const generation = ++this.programIndexGeneration;
-    const channels = PlaylistService.channels;
-    const programmesByChannel = EpgService.programmes;
-    const programs: ProgramResult[] = [];
-    const runs = new ProgrammeRuns();
-    let channelIndex = 0;
-    let channelPrograms: Programme[] = [];
-    let programmeIndex = 0;
-    const shouldContinue = (): boolean =>
-      this.active && generation === this.programIndexGeneration;
-    const collected = await runInFrameSlices(() => {
-      if (programmeIndex < channelPrograms.length) {
-        programs.push({
-          channel: channels[channelIndex - 1],
-          channelIndex: channelIndex - 1,
-          programme: channelPrograms[programmeIndex++],
-        });
-        return false;
-      }
-      if (channelIndex >= channels.length) return true;
-      const channel = channels[channelIndex++];
-      const epgId = EpgService.findChannelId(channel);
-      channelPrograms = epgId ? programmesByChannel[epgId] ?? [] : [];
-      programmeIndex = 0;
-      if (epgId && channelPrograms.length) {
-        runs.add(channelIndex - 1, EpgService.programmeCacheOrigin(epgId), channelPrograms.length);
-      }
-      return false;
-    }, { shouldContinue });
-    if (!collected) return null;
-
-    this.programIndex = programs;
-    this.programRuns = runs;
-    this.indexedChannels = channels;
-    this.indexedProgrammes = programmesByChannel;
-    return this.indexProgrammes(sessionId);
-  }
-
-  private indexProgrammes(sessionId: number): Promise<boolean> {
-    const programs = this.programIndex;
-    const postProgrammes = (): Promise<boolean> => this.postSource(
-      sessionId,
-      'programmes',
-      programs.length,
-      index => programDocument(programs[index]),
-    );
-    // Cached programme documents join the worker's channel documents, so
-    // they must come from the very channel list the program index walked.
-    const cachedProgrammes = this.workerChannels === this.indexedChannels
-      && sessionId === this.workerSession
-      ? this.programRuns.request(
-        sampleDocuments(programs.length, index => programDocument(programs[index])),
-      )
-      : null;
-    return cachedProgrammes
-      ? this.indexWorkerFromCache({ sessionId, cachedProgrammes }, postProgrammes)
-      : postProgrammes();
   }
 
   private async indexCatalog(sessionId: number, movies: boolean, series: boolean): Promise<boolean> {
@@ -1225,11 +1084,6 @@ export class Search {
 
   private queryLocally(query: string): SearchQueryResponse {
     const channels = PlaylistService.searchLocalRanked(query, this.resultLimit);
-    const programmes = rankPreparedTopK(
-      prepareSearchItems(this.programIndex, programDocument),
-      query,
-      this.resultLimit,
-    );
     const movies = this.account
       ? rankPreparedNamesTopK(prepareNameSearchItems(this.allVod), query, this.resultLimit)
       : { items: [], hasMore: false };
@@ -1240,10 +1094,6 @@ export class Search {
       channels: {
         indices: channels.items.map(channel => PlaylistService.indexOf(channel)),
         hasMore: channels.hasMore,
-      },
-      programmes: {
-        indices: indicesOf(this.programIndex, programmes.items),
-        hasMore: programmes.hasMore,
       },
       movies: {
         indices: indicesOf(this.allVod, movies.items),
@@ -1257,7 +1107,7 @@ export class Search {
   }
 
   private indexedLists(): unknown[] {
-    return [PlaylistService.channels, this.programIndex, this.indexedVod, this.indexedSeries];
+    return [PlaylistService.channels, this.indexedVod, this.indexedSeries];
   }
 
   private async recoverWorkerQuery(
@@ -1355,13 +1205,11 @@ export class Search {
     do {
       changed = false;
       const current = PlaylistService.channels;
-      const programs = this.programIndex;
       const movies = this.allVod;
       const series = this.allSeries;
       channels = current;
       const sources: Array<[SearchIndexSource, unknown[], (index: number) => string[] | string]> = [
         ['channels', current, index => channelDocument(current[index])],
-        ['programmes', programs, index => programDocument(programs[index])],
         ['movies', movies, index => movies[index].name],
         ['series', series, index => series[index].name],
       ];
@@ -1392,16 +1240,14 @@ export class Search {
     series: SeriesItem[],
   ): void {
     this.visibleChannels = itemsAt(PlaylistService.channels, response.channels.indices);
-    this.visiblePrograms = itemsAt(this.programIndex, response.programmes.indices);
     this.visibleMovies = itemsAt(vod, response.movies.indices);
     this.visibleSeries = itemsAt(series, response.series.indices);
-    this.hasMoreResults = response.channels.hasMore || response.programmes.hasMore
+    this.hasMoreResults = response.channels.hasMore
       || response.movies.hasMore || response.series.hasMore;
   }
 
   private clearResults(): void {
     this.visibleChannels = [];
-    this.visiblePrograms = [];
     this.visibleMovies = [];
     this.visibleSeries = [];
     this.hasMoreResults = false;
@@ -1413,7 +1259,6 @@ export class Search {
     return this.workerIndexReady
       && !this.workerIndexLost
       && this.workerIndexedChannels === PlaylistService.channels
-      && this.workerIndexedProgrammes === EpgService.programmes
       && this.workerIndexedAccountId === (account?.id ?? null)
       && (!account
         || (this.loadedFor === account.id
@@ -1423,12 +1268,8 @@ export class Search {
 
   private markWorkerIndexReady(account: PlaylistEntry | null): void {
     this.workerIndexReady = true;
-    // What the worker holds: the channels posted and the guide data the
-    // posted program index was built from, which can trail the services'.
+    // The channel list actually posted, which can trail the service's.
     this.workerIndexedChannels = this.workerChannels;
-    this.workerIndexedProgrammes = this.indexedChannels === this.workerChannels
-      ? this.indexedProgrammes
-      : null;
     this.workerIndexedAccountId = account?.id ?? null;
     this.workerIndexedGeneration = this.workerResetGeneration;
     // What the worker holds, which trails allVod/allSeries while a refresh posts.
@@ -1440,7 +1281,6 @@ export class Search {
       'scope=unified',
       `session=${String(this.workerSession)}`,
       `channels=${String(PlaylistService.channels.length)}`,
-      `programmes=${String(this.programIndex.length)}`,
       `movies=${String(this.allVod.length)}`,
       `series=${String(this.allSeries.length)}`,
     );
@@ -1450,7 +1290,6 @@ export class Search {
     const wasReady = this.workerIndexReady;
     this.workerIndexReady = false;
     this.workerIndexedChannels = null;
-    this.workerIndexedProgrammes = null;
     this.workerIndexedAccountId = null;
     this.workerIndexedGeneration = null;
     this.workerIndexedVod = null;
@@ -1465,119 +1304,12 @@ export class Search {
     }
   }
 
-  private programRow(result: ProgramResult, index: number): ReturnType<typeof html> {
-    const { channel, programme } = result;
-    const now = Date.now();
-    const state = programme.stop.getTime() <= now ? 'past' : programme.start.getTime() > now ? 'future' : 'live';
-    const day = formatDayLabel(programme.start);
-    const action = state === 'live'
-      ? t('search.liveNow')
-      : state === 'future'
-        ? (ReminderService.has(channelKey(channel), programme.start.getTime()) ? t('search.reminderSet') : t('search.setReminder'))
-        : XtreamArchiveService.isAvailable(channel, programme.start.getTime()) ? t('search.catchUp') : t('search.openChannel');
-    return html`
-      <div class="search-program-row state-${state}" data-focusable
-           data-key="p:${String(result.channelIndex)}:${String(programme.start.getTime())}"
-           data-program-index="${String(index)}">
-        <div class="search-program-time">${day.weekday} ${day.date}<br>${formatTime(programme.start)}</div>
-        <div class="search-program-body">
-          <div class="search-program-title">${programme.title}</div>
-          <div class="search-program-channel">${channel.name}${programme.category ? html` · ${programme.category}` : ''}</div>
-        </div>
-        <div class="search-program-action">${action}</div>
-      </div>
-    `;
-  }
-
-  private async activateProgram(index: number, query: string): Promise<void> {
-    const result = this.visiblePrograms[index];
-    if (!result) return;
-    const { channel, programme } = result;
-    const now = Date.now();
-    if (programme.start.getTime() > now) {
-      const key = channelKey(channel);
-      const startMs = programme.start.getTime();
-      if (ReminderService.has(key, startMs)) {
-        ReminderService.remove(key, startMs);
-        showToast(t('epg.reminderRemoved'));
-      } else {
-        ReminderService.add({
-          channelKey: key,
-          channelName: channel.name,
-          playlistIds: channel.playlistIds.slice(),
-          epgSourceUrl: EpgService.getSourceUrl(channel) ?? undefined,
-          title: programme.title,
-          startMs,
-          stopMs: programme.stop.getTime(),
-        });
-        showToast(t('epg.reminderSet'));
-      }
-      this.render();
-      return;
-    }
-
-    if (programme.stop.getTime() <= now && channel.catchupAccountId && channel.catchupStreamId) {
-      await XtreamArchiveService.load(channel);
-      if (!XtreamArchiveService.isAvailable(channel, programme.start.getTime())) {
-        showToast(t('epg.catchupUnavailable'));
-        this.render();
-        return;
-      }
-    }
-
-    if (programme.stop.getTime() <= now &&
-        XtreamArchiveService.isAvailable(channel, programme.start.getTime())) {
-      const key = channelKey(channel);
-      const startMs = programme.start.getTime();
-      const progress = StorageService.getCatchupProgressList(
-        key,
-        undefined,
-        legacyChannelKey(channel),
-      )
-        .find(entry => entry.progStart === startMs && !entry.completed);
-      if (progress) {
-        this.resumePrompt.show(programme.title, progress.position, {
-          onResume: () => this.playProgram(result, query, progress.position),
-          onStartOver: () => {
-            StorageService.clearCatchupProgress(key, startMs);
-            this.playProgram(result, query);
-          },
-          onCancel: () => { /* keep Search open */ },
-        });
-        return;
-      }
-    }
-    this.playProgram(result, query);
-  }
-
-  private playProgram(result: ProgramResult, query: string, resumeSecs?: number): void {
-    const { channel, channelIndex, programme } = result;
-    rememberQuery(query, liveParentalRequest(channel));
-    let catchup: CatchupInfo | undefined;
-    if (programme.stop.getTime() <= Date.now() &&
-        XtreamArchiveService.isAvailable(channel, programme.start.getTime())) {
-      catchup = {
-        start: Math.floor(programme.start.getTime() / 1000),
-        end: Math.floor(programme.stop.getTime() / 1000),
-        title: programme.title,
-        description: programme.description,
-        icon: programme.icon,
-        epgSourceUrl: EpgService.getSourceUrl(channel) ?? undefined,
-        resumeSecs,
-      };
-    }
-    this.handlers.onPlayChannel(channelIndex, catchup);
-  }
-
   private render(): void {
     const q = this.query.trim();
     const isXtream = !!this.account;
 
-    const hasResults = this.visibleChannels.length > 0 || this.visiblePrograms.length > 0
+    const hasResults = this.visibleChannels.length > 0
       || this.visibleMovies.length > 0 || this.visibleSeries.length > 0;
-    const hasMixedLists = !isXtream
-      && this.visibleChannels.length > 0
-      && this.visiblePrograms.length > 0;
     const channelSection = this.visibleChannels.length
       ? this.virtualList(
           t('common.channels'),
@@ -1587,18 +1319,7 @@ export class Search {
           (ch) => this.channelRow(ch),
         )
       : '';
-    const programSection = this.visiblePrograms.length
-      ? this.virtualList(
-          t('search.programs'),
-          'programmes',
-          this.visiblePrograms,
-          this.programVirtualizer,
-          (result, index) => this.programRow(result, index),
-        )
-      : '';
-
-    // Xtream: horizontal poster rails for catalog results. M3U-only channels and
-    // EPG programs use compact rows so their metadata remains readable.
+    // Xtream uses horizontal poster rails; M3U channels use compact rows.
     const resultsBody = !q
       ? html``
       : this.pendingIndex
@@ -1618,7 +1339,6 @@ export class Search {
                       (ch) => this.channelTile(ch),
                     )
                   : ''}
-                ${programSection}
                 ${this.visibleMovies.length
                   ? this.virtualRail(
                       t('common.movies'),
@@ -1640,14 +1360,12 @@ export class Search {
               `
           : html`
               ${channelSection}
-              ${programSection}
             `;
 
     // The query box lives in the tab bar; this view renders results only.
     morph(this.container, html`
-      <div class="search-view ${isXtream ? '' : 'search-lists'} ${
-        hasMixedLists ? 'search-lists-mixed' : ''
-      }" data-nav-container data-lazy-root data-search-query="${q}"
+      <div class="search-view ${isXtream ? '' : 'search-lists'}"
+           data-nav-container data-lazy-root data-search-query="${q}"
            data-search-pending="${this.queryPending ? 'true' : 'false'}">
         ${q && isXtream && this.catalogFilling(this.account!.id)
           ? html`<p class="catalog-hint search-note" role="status">${t('search.catalogLoading')}</p>`
@@ -1673,7 +1391,6 @@ export class Search {
   private virtualizers(): Record<string, VirtualList> {
     return {
       'channels-list': this.channelListVirtualizer,
-      programmes: this.programVirtualizer,
       'channels-rail': this.channelRailVirtualizer,
       movies: this.movieVirtualizer,
       series: this.seriesVirtualizer,
@@ -1737,8 +1454,6 @@ export class Search {
         || (!horizontal && action !== 'up' && action !== 'down')) return false;
     let items = key === 'channels-list' || key === 'channels-rail'
       ? this.visibleChannels
-      : key === 'programmes'
-        ? this.visiblePrograms
         : key === 'movies'
           ? this.visibleMovies
           : this.visibleSeries;
@@ -1747,8 +1462,6 @@ export class Search {
     if (next >= items.length && this.expandResults()) {
       items = key === 'channels-list' || key === 'channels-rail'
         ? this.visibleChannels
-        : key === 'programmes'
-          ? this.visiblePrograms
           : key === 'movies'
             ? this.visibleMovies
             : this.visibleSeries;
@@ -1774,14 +1487,12 @@ export class Search {
 
   private resultCount(key: string): number {
     if (key === 'channels-list' || key === 'channels-rail') return this.visibleChannels.length;
-    if (key === 'programmes') return this.visiblePrograms.length;
     if (key === 'movies') return this.visibleMovies.length;
     return this.visibleSeries.length;
   }
 
   private resultItemSize(key: string): number {
     if (key === 'channels-list') return 88;
-    if (key === 'programmes') return 109;
     return 240;
   }
 

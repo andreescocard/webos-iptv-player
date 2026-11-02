@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.19.0 — 2026-11-02
+
+### Changed
+
+- Search now covers channels, movies, and series without program indexing.
+- Movies shows random suggestions rated at least 7/10 above the Watchlist
+  and within each category, using the provider's available ratings.
+- Movie categories have icons and remain accessible in small catalogs.
+  Explicit service-labeled categories are grouped under Streaming.
+- Movie category grids support original order, alphabetical order in both
+  directions, and highest rating first, with unrated titles last.
+
+### Fixed
+
+- Category recommendations keep remote navigation within the action row
+  and move down to sorting before the movie grid.
+- Series still initializes the Continue Watching banner with the saved
+  episode, including titles outside the preloaded categories.
+- Movie category labels remain readable across all themes and at 150%
+  text size.
+
 ## 1.18.0 — 2026-10-26
 
 ### Added

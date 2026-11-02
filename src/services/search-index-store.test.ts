@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   settle: vi.fn(),
   playlistListeners: [] as Array<() => void>,
   catalogListeners: [] as Array<(key: string) => void>,
-  epgListeners: [] as Array<() => void>,
 }));
 
 vi.mock('../workers/app-worker-client', () => ({
@@ -26,12 +25,6 @@ vi.mock('./idb-cache', () => ({
 vi.mock('./xtream-catalog', () => ({
   onCatalogListWritten: (listener: (key: string) => void) => {
     mocks.catalogListeners.push(listener);
-    return () => undefined;
-  },
-}));
-vi.mock('./epg-service', () => ({
-  onEpgCacheWritten: (listener: () => void) => {
-    mocks.epgListeners.push(listener);
     return () => undefined;
   },
 }));
@@ -189,12 +182,12 @@ describe('SearchIndexPrewarmer', () => {
   it('logs each skipped source and a failed prewarm', async () => {
     mocks.run.mockResolvedValueOnce({ persist: [], skipped: [{ store: 'catalog-cache', reason: 'missing' }] });
     const prewarm = new SearchIndexPrewarmer(() => [SOURCE]);
-    prewarm.schedule('epg');
+    prewarm.schedule('catalog');
     await flushIdle();
     expect(logged(vi.mocked(console.log), 'search.index.prewarm.skipped'))
       .toEqual([expect.stringContaining('source=catalog-cache reason=missing')]);
     expect(logged(vi.mocked(console.log), 'search.index.prewarm.completed'))
-      .toEqual([expect.stringContaining('reason=epg sources=1 built=0 skipped=1')]);
+      .toEqual([expect.stringContaining('reason=catalog sources=1 built=0 skipped=1')]);
 
     mocks.run.mockRejectedValueOnce(new Error('terminated'));
     prewarm.schedule('catalog');
@@ -210,7 +203,7 @@ describe('SearchIndexPrewarmer', () => {
     }));
     const prewarm = new SearchIndexPrewarmer(() => [SOURCE]);
     prewarm.schedule('startup');
-    prewarm.schedule('epg');
+    prewarm.schedule('catalog');
     expect(idle).toHaveLength(1);
     idle.shift()!();
     await vi.waitFor(() => expect(mocks.run).toHaveBeenCalledTimes(1));
@@ -240,10 +233,9 @@ describe('SearchIndexPrewarmer', () => {
     expect(mocks.run).toHaveBeenCalledWith('search.prewarm', { sources: [SOURCE] });
   });
 
-  it('re-indexes after a playlist, guide, or Search catalog cache write', async () => {
+  it('re-indexes after a playlist or Search catalog cache write', async () => {
     mocks.playlistListeners.length = 0;
     mocks.catalogListeners.length = 0;
-    mocks.epgListeners.length = 0;
     const prewarm = new SearchIndexPrewarmer(() => [SOURCE]);
     prewarm.watchSourceWrites();
     mocks.playlistListeners.forEach(listener => listener());
@@ -252,9 +244,7 @@ describe('SearchIndexPrewarmer', () => {
     await flushIdle();
     mocks.catalogListeners.forEach(listener => listener(SOURCE.key));
     await flushIdle();
-    mocks.epgListeners.forEach(listener => listener());
-    await flushIdle();
     expect(logged(vi.mocked(console.log), 'search.index.prewarm.completed')
-      .map(line => /reason=(\w+)/.exec(line)![1])).toEqual(['playlist', 'catalog', 'epg']);
+      .map(line => /reason=(\w+)/.exec(line)![1])).toEqual(['playlist', 'catalog']);
   });
 });

@@ -196,6 +196,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   private readonly layers: Record<Mode, HTMLElement>;
   private browseReturn: BrowseReturn | null = null;
   private gridRequest = 0;
+  private gridReturnKey: string | null = null;
   private browseStale = false;
   // False while the first browse render is still loading, so a fill tick can't paint it early.
   private browseRendered = false;
@@ -218,6 +219,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   private readonly heroMetaCache = new LruCache<string, HeroMeta>(CONFIG.XTREAM.HERO_META_CACHE_ITEMS);
   // The rail element focus last left for the hero; Down returns to it.
   private heroReturnKey: string | null = null;
+  private restoringBrowse = false;
 
   constructor(protected container: HTMLElement, protected handlers: CatalogHandlers) {
     const layer = (mode: Mode): HTMLElement => {
@@ -326,6 +328,27 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   // Landscape artwork the Continue entry brings itself (an episode still), else ''.
   protected heroResumeArt(_item: I, _entry: ResumeEntry): string { return ''; }
   protected itemRating(_item: I): string { return ''; }
+  protected readonly preserveInitialHero: boolean = false;
+  protected initialHero(): I | null {
+    return this.heroFromResume() ?? this.railGroups[0]?.items[0] ?? this.heroFallback();
+  }
+  protected categoryHero(): I | null { return null; }
+  protected onGridOpened(): void {}
+  protected gridItems(): I[] {
+    return this.gridCategory ? (this.itemsByCategory[this.gridCategory.id] ?? []) : [];
+  }
+  protected gridControls(): Safe | '' { return ''; }
+  protected refreshGridOrder(): void {
+    this.gridFocusIndex = 0;
+    this.gridVirtualizer.setScrollOffset(0);
+    this.renderGrid(false);
+  }
+  protected categoryIcon(_category: C): string { return ''; }
+  protected categorySections(): { key: string; title: string; categories: C[] }[] {
+    return this.categories.length > this.railGroups.length
+      ? [{ key: 'all-categories', title: t('catalog.allCategories'), categories: this.categories }]
+      : [];
+  }
   // The hero's extra facts, from the item's detail info (null when it has none).
   protected abstract loadHeroMeta(
     account: PlaylistEntry,
@@ -402,6 +425,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   private refreshTrailerUi(): void {
     if (this.mode === 'detail') this.renderDetail();
     else if (this.mode === 'browse' && this.browseRendered) this.renderHero();
+    else if (this.mode === 'grid') this.renderCategoryHero();
   }
 
   private plotExpanded = false;
@@ -464,6 +488,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
 
   // Detail entry for subclasses: remembers where browse focus was first.
   protected enterDetail(): void {
+    this.gridReturnKey = this.mode === 'grid' ? this.focusedKey() : null;
     this.plotExpanded = false;
     this.showLayer('detail');
     // A new item's detail starts on its first button.
@@ -524,8 +549,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   }
 
   private gridIndexOf(key: string): number {
-    const cat = this.gridCategory;
-    const items = cat ? (this.itemsByCategory[cat.id] ?? []) : [];
+    const items = this.gridItems();
     return items.findIndex((it) => `i:${this.itemCategoryId(it)}:${this.itemId(it)}` === key);
   }
 
@@ -547,8 +571,11 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     const instant = this.lastRevealInstant;
     let scrolled = false;
     if (parsed.mode === 'browse' && parsed.rail === 'hero') return this.revealHero(instant) ? true : null;
-    // The grid's window owns its scroll offset; it alone brings a cell in.
-    if (parsed.mode === 'grid') return this.revealGridIndex(this.gridIndexOf(parsed.key)) ? true : null;
+    // The grid's window owns its scroll offset; header controls scroll normally.
+    if (parsed.mode === 'grid') {
+      const index = this.gridIndexOf(parsed.key);
+      if (index >= 0) return this.revealGridIndex(index) ? true : null;
+    }
     if (parsed.mode === 'detail') {
       const extra = this.revealExtraKey(parsed.key, instant);
       if (extra !== undefined) return extra;
@@ -567,13 +594,16 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.gridFocusIndex = index;
     const view = this.layers.grid.querySelector<HTMLElement>('.catalog-grid');
     const track = this.layers.grid.querySelector<HTMLElement>('.catalog-grid-track');
-    if (!this.gridVirtualizer.ensureVisible(
+    const changed = this.gridVirtualizer.ensureVisible(
       index,
       track?.clientWidth || CATALOG_GRID_VIEWPORT_WIDTH,
       view?.clientHeight || CATALOG_GRID_VIEWPORT_HEIGHT,
-    )) return false;
-    this.renderGrid(false);
-    return true;
+    );
+    if (changed) this.renderGrid(false);
+    const tile = this.layers.grid.querySelector<HTMLElement>(
+      `[data-grid-index="${index}"] [data-focusable]`,
+    );
+    return (tile ? this.revealElement(tile, true) : false) || changed;
   }
 
   // Scrolls each scroller around `el` just enough to show it whole; a rail
@@ -749,6 +779,10 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   }
 
   refreshPlaybackState(): void {
+    if (this.mode === 'grid') {
+      this.renderCategoryHero();
+      return;
+    }
     if (this.mode === 'detail') {
       this.renderDetail();
       return;
@@ -945,8 +979,24 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
         && this.moveRailFocus(action)) return;
     if (this.mode === 'grid'
         && (action === 'up' || action === 'down' || action === 'left' || action === 'right')) {
-      if (this.moveGridFocus(action)) return;
-      if (action === 'up') this.handlers.onRevealTabBar();
+      const current = this.current();
+      const inGrid = !!current?.closest('[data-grid-index]');
+      if (inGrid) {
+        if (this.moveGridFocus(action)) return;
+        if (action !== 'up') return;
+        const sort = this.layers.grid.querySelector<HTMLElement>('.catalog-sort .active');
+        if (sort) { this.place(sort, 'key'); return; }
+      } else if (action === 'down' && current?.closest('.catalog-sort')) {
+        this.revealGridIndex(this.gridFocusIndex);
+        this.place(this.layers.grid.querySelector<HTMLElement>(
+          `[data-grid-index="${this.gridFocusIndex}"] [data-focusable]`,
+        ), 'key');
+        return;
+      } else if (action === 'up' && current?.closest('.catalog-sort') && this.categoryHero()) {
+        this.place(this.layers.grid.querySelector<HTMLElement>('.catalog-hero-actions [data-focusable]'), 'key');
+        return;
+      }
+      if (!this.nav.move(action) && action === 'up') this.handlers.onRevealTabBar();
       return;
     }
     switch (action) {
@@ -1008,7 +1058,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       return;
     }
     if (el.dataset.heroAction !== undefined) {
-      if (this.heroItem) this.heroAction(el.dataset.heroAction, this.heroItem);
+      const item = this.mode === 'grid' ? this.categoryHero() : this.heroItem;
+      if (item) this.heroAction(el.dataset.heroAction, item);
       return;
     }
     if (el.dataset.action === 'trailer') {
@@ -1045,6 +1096,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       return;
     }
     this.heroReturnKey = this.keyFor(el);
+    if (this.restoringBrowse && this.preserveInitialHero) return;
     if (el.dataset.resumeEpisode !== undefined) {
       const entry = this.resume.find(r => r.itemId === el.dataset.resumeEpisode);
       const owner = entry ? this.resumeHeroItem(entry) : null;
@@ -1058,26 +1110,28 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   }
 
   private heroFocused(): boolean {
+    if (this.mode === 'grid') return !!this.current()?.closest('.catalog-category-feature');
     const parsed = parseKey(this.focusScope.focusKey);
     return this.mode === 'browse' && !!parsed && parsed.mode === 'browse' && parsed.rail === 'hero';
   }
 
-  // Left/Right stay on the hero's buttons, and Down returns to the rail
-  // tile focus came from rather than the one nearest the buttons.
+  // Hero actions stay in their row; Down returns to content or category sorting.
   private moveHeroFocus(action: Action): boolean {
     if (!this.heroFocused()) return false;
     const current = this.current();
     if (!current) return false;
     if (action === 'left' || action === 'right') {
       const buttons = Array.from(
-        this.layers.browse.querySelectorAll<HTMLElement>('.catalog-hero-actions [data-focusable]'),
+        this.layers[this.mode].querySelectorAll<HTMLElement>('.catalog-hero-actions [data-focusable]'),
       );
       const next = buttons[buttons.indexOf(current) + (action === 'left' ? -1 : 1)];
       if (next) this.place(next, 'key');
       return true;
     }
     if (action !== 'down') return false;
-    const back = this.heroReturnKey === null ? null : this.resolveKey(this.heroReturnKey);
+    const back = this.mode === 'grid'
+      ? this.layers.grid.querySelector<HTMLElement>('.catalog-sort .active')
+      : this.heroReturnKey === null ? null : this.resolveKey(this.heroReturnKey);
     if (!back) return false;
     this.place(back, 'key');
     return true;
@@ -1180,6 +1234,9 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       // A failed fetch is not cached, so the next visit asks again.
       if (meta) this.heroMetaCache.set(key, meta);
       if (this.heroItem === item && this.account?.id === account.id) this.renderHero();
+      if (this.categoryHero() === item && this.account?.id === account.id && this.mode === 'grid') {
+        this.renderCategoryHero();
+      }
     };
     this.loadHeroMeta(account, item, controller.signal).then(
       (meta) => done(meta ?? EMPTY_HERO_META),
@@ -1195,10 +1252,18 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     morph(body, this.heroText(this.fillNote()));
   }
 
-  private heroArt(): Safe {
-    const item = this.heroItem;
+  private renderCategoryHero(): void {
+    const item = this.categoryHero();
+    const art = this.layers.grid.querySelector<HTMLElement>('.catalog-hero');
+    const body = this.layers.grid.querySelector<HTMLElement>('.catalog-hero-body');
+    if (!item || !art || !body) return;
+    morph(art, this.heroArt(item, null));
+    morph(body, this.heroText('', item, null));
+  }
+
+  private heroArt(item: I | null = this.heroItem, resume: ResumeEntry | null = this.heroResume): Safe {
     const meta = item ? this.heroMetaCache.get(this.heroMetaKey(item)) : undefined;
-    const still = item && this.heroResume ? this.heroResumeArt(item, this.heroResume) : '';
+    const still = item && resume ? this.heroResumeArt(item, resume) : '';
     const backdrop = still || meta?.backdrop || '';
     const poster = item ? this.itemPoster(item) : '';
     const scrim = html`<div class="catalog-hero-scrim" data-key="scrim"></div>`;
@@ -1219,8 +1284,11 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     return scrim;
   }
 
-  private heroText(fillNote: Safe | ''): Safe {
-    const item = this.heroItem;
+  private heroText(
+    fillNote: Safe | '',
+    item: I | null = this.heroItem,
+    resume: ResumeEntry | null = this.heroResume,
+  ): Safe {
     const meta = item ? this.heroMetaCache.get(this.heroMetaKey(item)) : undefined;
     const facts = item
       ? buildFacts({
@@ -1233,7 +1301,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     return html`
       <div class="catalog-hero-text" data-key="hero-text">
         <h1 class="catalog-hero-title" data-key="hero-title">${item ? this.itemName(item) : this.kicker}</h1>
-        ${item && this.heroResume ? this.heroResumeNote(item, this.heroResume) : ''}
+        ${item && resume ? this.heroResumeNote(item, resume) : ''}
         ${facts.length ? html`<div class="catalog-hero-meta" data-key="hero-meta">${catalogFacts(facts)}</div>` : ''}
         ${meta?.plot ? html`<p class="catalog-hero-plot" data-key="hero-plot">${meta.plot}</p>` : ''}
         ${item ? html`
@@ -1285,6 +1353,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     if (!signal || signal.aborted) return;
     this.gridCategory = this.categories.find((c) => c.id === categoryId) ?? null;
     const request = ++this.gridRequest;
+    this.gridReturnKey = null;
     this.clearLayer('grid');
     if (!this.itemsByCategory[categoryId]) {
       this.renderLoading('grid');
@@ -1320,6 +1389,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     }
     this.gridFocusIndex = 0;
     this.gridVirtualizer.setScrollOffset(0);
+    this.onGridOpened();
     this.renderGrid();
   }
 
@@ -1437,14 +1507,12 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       this.heroPending = null;
       this.heroPendingResume = null;
     }
-    if (!this.heroItem) this.heroItem = this.heroFromResume() ?? this.railGroups[0]?.items[0] ?? this.heroFallback();
+    if (!this.heroItem) this.heroItem = this.initialHero();
     const continueRail = this.continueRail();
     const watchlistRail = this.watchlistRail();
     const fillNote = this.fillNote();
     const hasContent = this.categories.length > 0 || !!continueRail || !!watchlistRail;
-    // Once some categories have no rail, "All Categories" lists every category,
-    // rails included, so it is the one complete index of the catalog.
-    const moreCats = this.categories.length > this.railGroups.length ? this.categories : [];
+    const categorySections = this.categorySections();
 
     morph(browse, html`
       <div class="catalog-view catalog-browse" data-nav-container>
@@ -1460,34 +1528,44 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
                 ${continueRail}
                 ${watchlistRail}
                 ${this.railGroups.map((r) => this.categoryRail(r))}
-                ${moreCats.length ? html`
-                  <div class="catalog-rail" data-key="rail:all-categories"
-                       data-rail-key="all-categories">
-                    <h2 class="catalog-rail-title">${t('catalog.allCategories')}</h2>
+                ${categorySections.map((section) => html`
+                  <div class="catalog-rail" data-key="rail:${section.key}"
+                       data-rail-key="${section.key}">
+                    <h2 class="catalog-rail-title">${section.title}</h2>
                     <div class="catalog-category-grid">
-                      ${moreCats.map((c) => html`
-                        <div class="catalog-cat" data-focusable
-                             data-key="c:${c.id}" data-category-id="${c.id}">${
-                          raw(categoryLockBadge(this.parentalKind, this.account!.id, c.id))
-                        }${this.categoryLabel(c)}</div>
-                      `)}
+                      ${section.categories.map((c) => {
+                        const icon = this.categoryIcon(c);
+                        return html`
+                          <div class="catalog-cat ${icon ? 'catalog-cat-with-icon' : ''}" data-focusable
+                               data-key="c:${c.id}" data-category-id="${c.id}">${
+                            raw(categoryLockBadge(this.parentalKind, this.account!.id, c.id))
+                          }${icon ? html`<span class="catalog-cat-icon">${raw(icon)}</span>` : ''}
+                            <span class="catalog-cat-name">${this.categoryLabel(c)}</span>
+                          </div>
+                        `;
+                      })}
                     </div>
                   </div>
-                ` : ''}
+                `)}
               </div>
             </div>
           `}
       </div>
     `);
     if (this.heroItem) this.fetchHeroMeta(this.heroItem);
-    if (restoreFocus) this.restoreBrowseFocus();
+    if (restoreFocus) {
+      this.restoringBrowse = true;
+      try { this.restoreBrowseFocus(); } finally { this.restoringBrowse = false; }
+    }
   }
 
   protected renderGrid(restoreFocus = true): void {
     this.showLayer('grid');
     const gridLayer = this.layers.grid;
     const cat = this.gridCategory;
-    const items = cat ? (this.itemsByCategory[cat.id] ?? []) : [];
+    const items = this.gridItems();
+    const featured = this.categoryHero();
+    const previousKey = this.focusedKey() ?? this.gridReturnKey;
     this.gridFocusIndex = Math.max(0, Math.min(this.gridFocusIndex, items.length - 1));
     const previousView = gridLayer.querySelector<HTMLElement>('.catalog-grid');
     const previousTrack = gridLayer.querySelector<HTMLElement>('.catalog-grid-track');
@@ -1505,6 +1583,12 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     morph(gridLayer, html`
       <div class="catalog-view catalog-grid" data-nav-container data-lazy-root>
         <h1 class="catalog-grid-title">${cat ? this.categoryLabel(cat) : this.kicker}</h1>
+        ${featured ? html`
+          <div class="catalog-category-feature" data-key="category-feature" data-nav-container>
+            <div class="catalog-hero">${this.heroArt(featured, null)}</div>
+            <div class="catalog-hero-body">${this.heroText('', featured, null)}</div>
+          </div>` : ''}
+        ${this.gridControls()}
         ${items.length === 0
           ? html`<p class="catalog-hint">${this.gridEmptyMessage}</p>`
           : html`
@@ -1528,12 +1612,21 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     `);
     const view = gridLayer.querySelector<HTMLElement>('.catalog-grid');
     const track = gridLayer.querySelector<HTMLElement>('.catalog-grid-track');
+    const leading = this.gridTrackStart(view, track);
     const viewOffset = this.gridVirtualizer.scrollOffset === 0
-      ? 0
-      : this.gridVirtualizer.scrollOffset + this.gridTrackStart(view, track);
+      ? Math.min(previousView?.scrollTop ?? 0, leading)
+      : this.gridVirtualizer.scrollOffset + leading;
     if (view) this.scrollGuard.syncOffset(view, 'vertical', viewOffset);
+    if (featured) this.fetchHeroMeta(featured);
     if (restoreFocus) {
-      const focused = gridLayer.querySelector<HTMLElement>(
+      this.gridReturnKey = null;
+      const header = previousKey && !previousKey.startsWith('i:')
+        ? this.focusableByKey(gridLayer, previousKey)
+        : null;
+      const firstHero = !previousView && featured
+        ? gridLayer.querySelector<HTMLElement>('.catalog-hero-actions [data-focusable]')
+        : null;
+      const focused = header ?? firstHero ?? gridLayer.querySelector<HTMLElement>(
         `[data-grid-index="${this.gridFocusIndex}"] [data-focusable]`,
       );
       this.place(focused, this.placementVia());
@@ -1541,8 +1634,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   }
 
   private moveGridFocus(direction: Action & ('up' | 'down' | 'left' | 'right')): boolean {
-    const cat = this.gridCategory;
-    const items = cat ? (this.itemsByCategory[cat.id] ?? []) : [];
+    const items = this.gridItems();
     if (!items.length) return false;
     const track = this.layers.grid.querySelector<HTMLElement>('.catalog-grid-track');
     const view = this.layers.grid.querySelector<HTMLElement>('.catalog-grid');
@@ -1598,8 +1690,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.gridSnapTimer = setTimeout(() => {
       this.gridSnapTimer = null;
       if (this.mode !== 'grid') return;
-      const category = this.gridCategory;
-      const items = category ? (this.itemsByCategory[category.id] ?? []) : [];
+      const items = this.gridItems();
       const track = this.layers.grid.querySelector<HTMLElement>('.catalog-grid-track');
       const viewportWidth = track?.clientWidth || CATALOG_GRID_VIEWPORT_WIDTH;
       const viewportHeight = view.clientHeight || CATALOG_GRID_VIEWPORT_HEIGHT;

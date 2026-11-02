@@ -8,7 +8,6 @@ import {
   settleSearchIndex,
   type SearchIndexReservation,
 } from './idb-cache';
-import { onEpgCacheWritten } from './epg-service';
 import { onCatalogListWritten } from './xtream-catalog';
 
 const log = createLogger('SearchIndex');
@@ -121,7 +120,6 @@ export class SearchIndexPrewarmer {
   watchSourceWrites(): () => void {
     const stops = [
       onPlaylistCacheWritten(() => this.schedule('playlist')),
-      onEpgCacheWritten(() => this.schedule('epg')),
       onCatalogListWritten((key) => {
         if (this.sources().some(source => source.key === key)) this.schedule('catalog');
       }),

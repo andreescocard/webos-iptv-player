@@ -1955,7 +1955,7 @@ export async function runM3USearchBenchmark(options) {
         postMs += elapsed;
         posts++;
         const payload = message.payload || {};
-        ['channels', 'programmes', 'movies', 'series'].forEach((source) => {
+        ['channels', 'movies', 'series'].forEach((source) => {
           const cached = `cached${source[0].toUpperCase()}${source.slice(1)}`;
           if (payload[source] === undefined && payload[cached] === undefined) return;
           postBySource[source] = round((postBySource[source] || 0) + elapsed);
@@ -2095,14 +2095,10 @@ export async function runM3USearchBenchmark(options) {
   input.value = 'channel';
   input.dispatchEvent(new Event('input', { bubbles: true }));
   await waitFor('#view-search:not(.hidden)');
-  input.value = 'rareprogramneedle';
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-  await waitFor('#view-search .search-program-row');
+  await waitForSearchQuery('channel');
   const queries = {
     channelsBroad: await queryDistribution('channel'),
     channelsSparse: await queryDistribution('rarechannelneedle'),
-    programsBroad: await queryDistribution('program'),
-    programsSparse: await queryDistribution('rareprogramneedle'),
     noMatch: await queryDistribution('zzzz-no-match'),
   };
   input.value = 'rarechannelneedle';
@@ -2110,15 +2106,10 @@ export async function runM3USearchBenchmark(options) {
   await waitForSearchQuery('rarechannelneedle');
   const sparseSearch = {
     channels: document.querySelectorAll('.search-channel-row').length,
-    programs: 0,
   };
-  input.value = 'rareprogramneedle';
+  input.value = 'channel';
   input.dispatchEvent(new Event('input', { bubbles: true }));
-  await waitForSearchQuery('rareprogramneedle');
-  sparseSearch.programs = document.querySelectorAll('.search-program-row').length;
-  input.value = 'program';
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-  await waitForSearchQuery('program');
+  await waitForSearchQuery('channel');
   return {
     initialOpenMs,
     indexBuild,
@@ -2126,7 +2117,6 @@ export async function runM3USearchBenchmark(options) {
     open: distribution(openValues),
     queries,
     renderedChannels: document.querySelectorAll('.search-channel-row').length,
-    renderedPrograms: document.querySelectorAll('.search-program-row').length,
     sparseSearch,
     renderedCatalogSections: document.querySelectorAll(
       '[data-search-virtual="movies"], [data-search-virtual="series"]',
@@ -2148,15 +2138,15 @@ function assertSearchIndexSamples(label, report) {
 
 export function assertM3USearchBenchmark(report) {
   assertSearchIndexSamples('M3U', report);
-  if (!(report.renderedPrograms > 0 && report.renderedPrograms < 30)) {
+  if (!(report.renderedChannels > 0 && report.renderedChannels < 30)) {
     throw new Error(
-      `M3U Search mounted ${String(report.renderedPrograms)} program rows; expected 1-29`,
+      `M3U Search mounted ${String(report.renderedChannels)} channel rows; expected 1-29`,
     );
   }
   if (report.renderedCatalogSections !== 0) {
     throw new Error('M3U Search rendered Xtream catalog sections');
   }
-  if (report.sparseSearch.channels !== 1 || report.sparseSearch.programs !== 1) {
+  if (report.sparseSearch.channels !== 1) {
     throw new Error('M3U Search sparse queries did not return exactly one result');
   }
 }
@@ -2805,7 +2795,7 @@ export async function runBenchmarkSuites(options) {
           postMs += elapsed;
           posts++;
           const payload = message.payload || {};
-          ['channels', 'programmes', 'movies', 'series'].forEach((source) => {
+          ['channels', 'movies', 'series'].forEach((source) => {
             const cached = `cached${source[0].toUpperCase()}${source.slice(1)}`;
             if (payload[source] === undefined && payload[cached] === undefined) return;
             postBySource[source] = round((postBySource[source] || 0) + elapsed);
@@ -3223,9 +3213,6 @@ export async function runBenchmarkSuites(options) {
     await waitFor(
       '#view-search [data-search-virtual="movies"] .search-virtual-rail-spacer',
     );
-    input.value = 'rareprogramneedle';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await waitFor('#view-search .search-program-row');
     input.value = '';
     input.dispatchEvent(new Event('input', { bubbles: true }));
     const searchOpen = await searchOpenDistribution();
@@ -3234,8 +3221,6 @@ export async function runBenchmarkSuites(options) {
       channelsSparse: await queryDistribution('rarechannelneedle'),
       moviesBroad: await queryDistribution('movie'),
       moviesSparse: await queryDistribution('raremovieneedle'),
-      programsBroad: await queryDistribution('program'),
-      programsSparse: await queryDistribution('rareprogramneedle'),
       noMatch: await queryDistribution('zzzz-no-match'),
     };
     input.value = 'rarechannelneedle';
@@ -3246,7 +3231,6 @@ export async function runBenchmarkSuites(options) {
         '#view-search .search-channel-row, #view-search .search-channel-tile',
       ).length,
       movies: 0,
-      programs: 0,
     };
     input.value = 'raremovieneedle';
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -3254,32 +3238,21 @@ export async function runBenchmarkSuites(options) {
     sparseCounts.movies = document.querySelectorAll(
       '#view-search [data-search-virtual="movies"] .catalog-tile',
     ).length;
-    input.value = 'rareprogramneedle';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await waitForSearchQuery('rareprogramneedle');
-    sparseCounts.programs = document.querySelectorAll(
-      '#view-search .search-program-row',
-    ).length;
-    if (sparseCounts.channels !== 1 || sparseCounts.movies !== 1
-        || sparseCounts.programs !== 1) {
+    if (sparseCounts.channels !== 1 || sparseCounts.movies !== 1) {
       throw new Error(`Sparse search rendered unexpected counts: ${JSON.stringify(sparseCounts)}`);
     }
-    input.value = 'program';
+    input.value = 'channel';
     input.dispatchEvent(new Event('input', { bubbles: true }));
-    await waitForSearchQuery('program');
+    await waitForSearchQuery('channel');
     const search = {
       initialOpenMs: searchInitialOpenMs,
       indexBuild: searchIndexBuild,
       indexBuildWarm: searchIndexBuildWarm,
       open: searchOpen,
       queries,
-      renderedPrograms: document.querySelectorAll(
-        '#view-search .search-program-row',
+      renderedChannels: document.querySelectorAll(
+        '#view-search .search-channel-row, #view-search .search-channel-tile',
       ).length,
-      programTotalSize: pixelSize(
-        '#view-search [data-search-virtual="programmes"] .search-virtual-list-spacer',
-        'height',
-      ),
     };
 
     if (longTaskObserver) {
@@ -3455,7 +3428,7 @@ export function assertBenchmarkScale(report, scale) {
   bounded('Movies', report.movies.rendered, 60);
   bounded('Series', report.series.rendered, 60);
   bounded('Episodes', report.series.episodes.rendered, 20);
-  bounded('Search programs', report.search.xtream.renderedPrograms, 30);
+  bounded('Search channels', report.search.xtream.renderedChannels, 60);
   assertSearchIndexSamples('Xtream', report.search.xtream);
   if (!report.interactions.wheelToDpad.focusedConnected) {
     throw new Error('Wheel-to-D-pad focus is detached');
@@ -3509,7 +3482,6 @@ export function assertBenchmarkScale(report, scale) {
   closeTo(report.movies.totalSize, Math.ceil(scale / 7) * 395, 32);
   closeTo(report.series.totalSize, Math.ceil(scale / 7) * 395, 32);
   closeTo(report.series.episodes.totalSize, scale * 138);
-  closeTo(report.search.programTotalSize, scale * 109);
 }
 
 export function assertColdLoadBenchmark(report, scale) {

@@ -125,6 +125,22 @@ describe('Series browse + grid', () => {
         categoryId: '1', watchlistOwner: { kind: 'series', itemId: 's2' }, ...extra,
       });
 
+      it('initializes the continued episode hero even outside preloaded categories', async () => {
+        storageMock.getResumeList.mockReturnValue([entry({ categoryId: '7' })]);
+        catalogMock.loadSeriesInfo.mockResolvedValue(info());
+        const cats = Array.from({ length: 7 }, (_, i) => ({ id: String(i + 1), name: `Category ${i + 1}` }));
+        const { view, handlers } = await openWith(cats, [s1]);
+        vi.advanceTimersByTime(500);
+        await settle();
+        expect(title()).toBe('Series Two');
+        expect(container.querySelector('.catalog-hero-episode-name')?.textContent).toBe('S2E5 · Episode Five');
+        expect(container.querySelector('.catalog-hero-backdrop')?.getAttribute('src')).toBe('http://host/still.jpg');
+        hover('[data-hero-action="play"]');
+        view.handleAction('select');
+        await settle();
+        expect(handlers.onPlayVod).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'e2', resumeSecs: 300 }));
+      });
+
       it('shows the series, the episode and its still in the hero when focused', async () => {
         storageMock.getResumeList.mockReturnValue([entry()]);
         catalogMock.loadSeriesInfo.mockResolvedValue(info({ backdrop: 'http://host/w2.jpg' }));

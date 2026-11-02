@@ -4,7 +4,6 @@ import {
   routeLiveManifest,
   SAMPLE_M3U,
   enterTab,
-  readUserDataStore,
 } from './helpers';
 
 function xmltvDate(date: Date): string {
@@ -73,24 +72,13 @@ async function enterSearch(page: import('@playwright/test').Page): Promise<void>
   await expect(page.locator('.tab-bar-search.expanded')).toBeVisible();
 }
 
-test('M3U channel results retain visible space above matching programmes', async ({ page }) => {
-  const start = new Date(Date.now() + 60 * 60 * 1000);
-  const stop = new Date(start.getTime() + 60 * 60 * 1000);
-  const epg = `<tv>
-    <channel id="one"><display-name>Channel One</display-name></channel>
-    <programme channel="one" start="${xmltvDate(start)}" stop="${xmltvDate(stop)}">
-      <title>Programme One</title>
-    </programme>
-  </tv>`;
+test('M3U channel results retain visible row space', async ({ page }) => {
   await page.route('**/playlist.m3u', (route) =>
     route.fulfill({ status: 200, contentType: 'application/x-mpegurl', body: SAMPLE_M3U }));
-  await page.route('**/guide.xml', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/xml', body: epg }));
   await page.addInitScript(() => {
     localStorage.setItem('iptv_playlists', JSON.stringify([
       { name: 'P', url: 'http://host/playlist.m3u' },
     ]));
-    localStorage.setItem('iptv_epg_url', JSON.stringify('http://host/guide.xml'));
   });
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
@@ -98,15 +86,10 @@ test('M3U channel results retain visible space above matching programmes', async
   await page.locator('.tab-bar-search-input').fill('one');
 
   const channel = page.locator('#view-search .search-channel-row').first();
-  const programme = page.locator('#view-search .search-program-row').first();
   await expect(channel).toContainText('Channel One');
-  await expect(programme).toContainText('Programme One');
   await expect.poll(async () => {
     const channelBox = await channel.boundingBox();
-    const programmeBox = await programme.boundingBox();
-    if (!channelBox || !programmeBox) return false;
-    return channelBox.height >= 80
-      && channelBox.y + channelBox.height <= programmeBox.y;
+    return !!channelBox && channelBox.height >= 80;
   }).toBe(true);
 });
 
@@ -191,22 +174,21 @@ test('a wide virtual search rail keeps its full scrollable width', async ({ page
     .toBeLessThanOrEqual(1);
 });
 
-test('program search shows XMLTV metadata and toggles a future reminder', async ({ page }) => {
+test('program-only titles produce no results while channels, movies and series remain searchable', async ({ page }) => {
   await seedSearch(page);
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
   await enterSearch(page);
 
-  await page.locator('.tab-bar-search-input').fill('report');
-  const result = page.locator('#view-search .search-program-row');
-  await expect(result).toContainText('Future Report');
-  await expect(result).toContainText('Channel One');
-  await expect(result).toContainText('Set reminder');
+  await page.locator('.tab-bar-search-input').fill('Future Report');
+  await expect(page.locator('#view-search .search-empty')).toHaveText('No results found.');
+  await expect(page.locator('#view-search [data-focusable]')).toHaveCount(0);
 
-  await result.click();
-  await expect(result).toContainText('Reminder set');
-  await expect.poll(async () =>
-    (await readUserDataStore(page, 'reminders')).length).toBe(1);
+  await page.locator('.tab-bar-search-input').fill('one');
+  await expect(page.locator('#view-search .catalog-tile[data-channel-index="0"]')).toContainText('Channel One');
+  await expect(page.locator('#view-search .catalog-tile[data-stream-id="10"]')).toContainText('Movie One');
+  await expect(page.locator('#view-search .catalog-tile[data-series-id="1"]')).toContainText('Series One');
+  await expect(page.locator('#view-search .catalog-rail-title')).toHaveText(['Channels', 'Movies', 'Series']);
 });
 
 test('a movie search result deep-links into its Movies detail and Back returns to Search', async ({ page }) => {
@@ -489,7 +471,7 @@ test('a click on the dimmed view leaves search and restores the tab underneath',
   await expect(page.locator('.tab-bar .search-icon')).not.toHaveClass(/active/);
 });
 
-test('recent searches line up with the search input, not the icon', async ({ page }) => {
+test('recent searches align with the input right edge and widen leftward when needed', async ({ page }) => {
   await seedSearch(page);
   await page.addInitScript(() => {
     localStorage.setItem('iptv_search_history', JSON.stringify(['one']));
@@ -503,7 +485,10 @@ test('recent searches line up with the search input, not the icon', async ({ pag
   const [panelBox, inputBox] = await Promise.all([
     panel.boundingBox(), page.locator('.tab-bar-search-input').boundingBox(),
   ]);
-  expect(Math.abs(panelBox!.x - inputBox!.x)).toBeLessThanOrEqual(1);
+  // The panel keeps its readable minimum width even when the tab bar has less
+  // space for the input; any extra width grows leftward, never under the icon.
+  expect(panelBox!.x).toBeLessThanOrEqual(inputBox!.x + 1);
+  expect(panelBox!.width).toBeGreaterThanOrEqual(inputBox!.width - 1);
   expect(Math.abs((panelBox!.x + panelBox!.width) - (inputBox!.x + inputBox!.width))).toBeLessThanOrEqual(1);
 });
 
@@ -727,12 +712,20 @@ test('Up back to the box leaves no ring on a result, while typing too', async ({
 
 test('Down from the box after Up rings a result at once, and one Right moves', async ({ page }) => {
   await seedSearch(page);
+  // This regression needs a horizontal neighbour: the stock seed has only one
+  // channel matching "one", so Right would correctly stay on that sole tile.
+  await page.route('**/get.php*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/x-mpegurl',
+    body: SAMPLE_M3U + '\n#EXTINF:-1 tvg-id="search-extra" group-title="News",Channel One Extra\nhttp://streams.example.com/search-extra.m3u8',
+  }));
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
   await enterSearch(page);
   const input = page.locator('.tab-bar-search-input');
   await input.fill('one');
   await expect(page.locator('#view-search .catalog-tile[data-stream-id="10"]')).toContainText('Movie One');
+  await expect(page.locator('#view-search .search-channel-tile')).toHaveCount(2);
   await input.press('ArrowDown');
   const focused = page.locator('#view-search .focused');
   await expect(focused).toHaveCount(1);

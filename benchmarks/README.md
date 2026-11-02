@@ -89,9 +89,8 @@ Large extents use JavaScript-style digit separators, for example
 
 Xtream Search uses broad and no-match query shapes:
 
-- `channel`: broad channel and program matches.
+- `channel`: broad channel matches.
 - `movie`: 50,000 movie matches, including ranking and sorting.
-- `program`: 50,000 EPG program matches.
 - `zzzz-no-match`: full scans with no result rendering.
 
 Each collection also uses a unique synthetic needle query to capture the
@@ -110,7 +109,7 @@ measurements. The production parser hook is inert unless the isolated benchmark
 runner injects its separate Chrome-68-compatible parser bundle. The shipped app
 bundle contains no benchmark API.
 The M3U-only reload asserts that Movies and Series are absent, then repeats the
-channel, program, and no-match shapes without catalog ranking.
+channel and no-match shapes without catalog ranking.
 
 `search.{xtream,m3u}.indexBuild` follows the main thread from opening Search
 on a cold index — no stored `search-index-cache` record and no running app
@@ -118,7 +117,7 @@ worker — until `event=search.worker.index.ready`: the wall time
 (`readyMs`), the longest animation-frame gap (`maxFrameGapMs`), Long Task
 count/total/max, and the synchronous time spent in `postMessage` for every
 `search.index` payload (`postMs`, `posts`, and `postBySource`, which
-attributes each post to the channel, programme, movie, and series sources it
+attributes each post to the channel, movie, and series sources it
 carries, posted or read from IndexedDB). `cacheFallbacks` lists any
 `event=search.worker.cache.fallback` the app logged, where the worker could
 not read or verify a source from IndexedDB and the page posted its documents

@@ -54,7 +54,7 @@ vi.mock('../parsers/xmltv-parser', () => {
   };
 });
 
-import { EpgService, onEpgCacheWritten } from './epg-service';
+import { EpgService } from './epg-service';
 import { getCachedEpg, setCachedEpg } from './idb-cache';
 import { parseXMLTVWithStats } from '../parsers/xmltv-parser';
 import { fetchMaybeGzipText } from '../utils/fetch-helper';
@@ -525,57 +525,6 @@ describe('EpgService cache and refresh', () => {
       channel({ id: 'a', name: 'Alpha', playlistIds: ['a'] }),
     );
     expect(EpgService.getNowPlaying(id!)?.title).toBe('Cached');
-  });
-
-  it('locates restored and freshly cached programmes in the epg-cache', async () => {
-    vi.mocked(getCachedEpg).mockResolvedValueOnce({
-      url: 'http://a',
-      timestamp: NOON,
-      data: parsed('a', 'Alpha', 'Cached'),
-    });
-    await EpgService.restoreCached([source('http://a', ['a'])]);
-    const id = EpgService.findChannelId(
-      channel({ id: 'a', name: 'Alpha', playlistIds: ['a'] }),
-    )!;
-    expect(EpgService.programmeCacheOrigin(id))
-      .toEqual({ url: 'http://a', id: 'a', timestamp: NOON });
-
-    parseXMLTVMock.mockReturnValue(parsed('a', 'Alpha', 'Fresh'));
-    vi.mocked(setCachedEpg).mockResolvedValueOnce(false);
-    await EpgService.refresh(undefined, true);
-    expect(EpgService.programmeCacheOrigin(id)).toBeNull();
-    expect(EpgService.getProgrammeCacheRecords()).toEqual([]);
-
-    vi.mocked(setCachedEpg).mockResolvedValueOnce(true);
-    await EpgService.refresh(undefined, true);
-    const stored = vi.mocked(setCachedEpg).mock.lastCall!;
-    expect(EpgService.programmeCacheOrigin(id))
-      .toEqual({ url: 'http://a', id: 'a', timestamp: stored[3] });
-    expect(EpgService.getProgrammeCacheRecords()).toEqual([{ url: 'http://a', timestamp: stored[3] }]);
-  });
-
-  it('announces a fetched guide once its cache record is stored', async () => {
-    await EpgService.restoreCached([source('http://a', ['a'])]);
-    parseXMLTVMock.mockReturnValue(parsed('a', 'Alpha', 'Fresh'));
-    let finishWrite: (stored: boolean) => void = () => undefined;
-    vi.mocked(setCachedEpg).mockImplementationOnce(() =>
-      new Promise((resolve) => { finishWrite = resolve; }));
-    const records: Array<Array<{ url: string; timestamp: number }>> = [];
-    const stop = onEpgCacheWritten(() => records.push(EpgService.getProgrammeCacheRecords()));
-    let published = false;
-    try {
-      const refreshed = EpgService.refresh(() => { published = true; }, true);
-      await vi.waitFor(() => expect(setCachedEpg).toHaveBeenCalled());
-      expect(published).toBe(true);
-      expect(records).toEqual([]);
-
-      finishWrite(true);
-      await refreshed;
-      const stored = vi.mocked(setCachedEpg).mock.lastCall!;
-      expect(records).toEqual([[{ url: 'http://a', timestamp: stored[3] }]]);
-    } finally {
-      stop();
-    }
   });
 
   it('queues refresh behind cache restoration', async () => {

@@ -4,7 +4,6 @@ import { sourceIndexValue, type SourceIndex } from './search-source-index';
 import type {
   SearchCachedChannels,
   SearchCachedNames,
-  SearchCachedProgrammes,
   SearchDocumentSamples,
 } from './tasks';
 
@@ -83,89 +82,3 @@ export function cachedNameDocuments(
   return names;
 }
 
-export function checkProgrammeRuns(request: SearchCachedProgrammes): void {
-  const runs = request.runChannels.length;
-  if (request.runRecords.length !== runs
-      || request.runIds.length !== runs
-      || request.runCounts.length !== runs) {
-    throw new SearchCacheError('runs_invalid');
-  }
-  for (let run = 0; run < runs; run++) {
-    if (request.runRecords[run] >= request.records.length) {
-      throw new SearchCacheError('runs_invalid');
-    }
-  }
-}
-
-interface RunLookup {
-  positions: Map<string, number>;
-  starts: Uint32Array;
-}
-
-// Where each channel id's programmes start in an EPG index.
-const runLookups = new WeakMap<SourceIndex, RunLookup>();
-
-function runLookupOf(index: SourceIndex): RunLookup {
-  let lookup = runLookups.get(index);
-  if (lookup) return lookup;
-  const ids = index.runIds ?? [];
-  const counts = index.runCounts ?? new Uint32Array(0);
-  lookup = { positions: new Map(), starts: new Uint32Array(ids.length) };
-  let start = 0;
-  for (let i = 0; i < ids.length; i++) {
-    lookup.positions.set(ids[i], i);
-    lookup.starts[i] = start;
-    start += counts[i];
-  }
-  runLookups.set(index, lookup);
-  return lookup;
-}
-
-// Extracts the runs stored in one EPG index into `runs`, joined with the folded
-// name and group of the channel each run belongs to.
-export function cachedProgrammeRuns(
-  index: SourceIndex,
-  recordIndex: number,
-  request: SearchCachedProgrammes,
-  channels: string[][],
-  runs: Array<string[][] | undefined>,
-): void {
-  const lookup = runLookupOf(index);
-  for (let run = 0; run < request.runRecords.length; run++) {
-    if (request.runRecords[run] !== recordIndex) continue;
-    const channel = channels[request.runChannels[run]];
-    if (!channel) throw new SearchCacheError('runs_invalid');
-    const position = lookup.positions.get(request.runIds[run]);
-    if (position === undefined || index.runCounts![position] !== request.runCounts[run]) {
-      throw new SearchCacheError('record_changed');
-    }
-    const first = lookup.starts[position];
-    const count = request.runCounts[run];
-    const documents: string[][] = new Array(count);
-    for (let i = 0; i < count; i++) {
-      const item = first + i;
-      documents[i] = [
-        sourceIndexValue(index, item, 0),
-        sourceIndexValue(index, item, 1),
-        sourceIndexValue(index, item, 2),
-        channel[0],
-        channel[1],
-      ];
-    }
-    runs[run] = documents;
-  }
-}
-
-export function joinProgrammeRuns(
-  runs: Array<string[][] | undefined>,
-  request: SearchCachedProgrammes,
-): string[][] {
-  const documents: string[][] = [];
-  for (let run = 0; run < request.runChannels.length; run++) {
-    const documentsOfRun = runs[run];
-    if (!documentsOfRun) throw new SearchCacheError('runs_invalid');
-    for (let i = 0; i < documentsOfRun.length; i++) documents.push(documentsOfRun[i]);
-  }
-  verifySamples(documents, request.samples);
-  return documents;
-}

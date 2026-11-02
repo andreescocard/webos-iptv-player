@@ -8,6 +8,7 @@ import { CatalogView, buildFacts, catalogButton, catalogFacts, type CatalogActio
 import { PLAY_ICON, watchlistIcon } from './icons';
 import { showToast } from './toast';
 import { t, tp } from '../i18n';
+import { movieCategoryIcon, randomGoodMovie, sortMovies, streamingCategory, type MovieSort } from '../utils/movie-discovery';
 
 // The Movies section: browse (Continue rail + per-category rails + an "all
 // categories" drill-in) → per-category poster grid → a detail screen with
@@ -16,6 +17,7 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
   protected get kicker(): string { return t('common.movies'); }
   protected readonly resumeKind: ResumeKind = 'vod';
   protected readonly parentalKind = 'vod' as const;
+  protected readonly preserveInitialHero = true;
   protected scopeName(): string { return 'movies'; }
   protected get emptyMessage(): string { return t('catalog.noMovies'); }
   protected get gridEmptyMessage(): string { return t('catalog.noMoviesCategory'); }
@@ -26,6 +28,98 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
   private openedFromWatchlist = false;
   private detailController: AbortController | null = null;
   private heroPlayRequest = 0;
+  private movieSort: MovieSort = 'original';
+  private sortedSource: VodItem[] | null = null;
+  private sortedMovies: VodItem[] = [];
+  private categorySuggestion: VodItem | null = null;
+  private lastSuggestion: { accountId: string; itemId: string } | null = null;
+
+  protected initialHero(): VodItem | null {
+    const seen = new Set<string>();
+    const candidates: VodItem[] = [];
+    Object.keys(this.itemsByCategory).forEach((categoryId) => {
+      this.itemsByCategory[categoryId].forEach((item) => {
+        if (seen.has(item.streamId)) return;
+        seen.add(item.streamId);
+        candidates.push(item);
+      });
+    });
+    return this.suggest(candidates) ?? super.initialHero();
+  }
+
+  private suggest(items: VodItem[]): VodItem | null {
+    const previous = this.lastSuggestion?.accountId === this.account?.id
+      ? this.lastSuggestion?.itemId : undefined;
+    const item = randomGoodMovie(items, previous);
+    if (item && this.account) {
+      this.lastSuggestion = { accountId: this.account.id, itemId: item.streamId };
+    }
+    return item;
+  }
+
+  protected onGridOpened(): void {
+    this.categorySuggestion = this.suggest(super.gridItems());
+  }
+
+  protected categoryHero(): VodItem | null {
+    return this.gridCategory ? this.categorySuggestion : null;
+  }
+
+  protected gridItems(): VodItem[] {
+    const source = super.gridItems();
+    if (this.sortedSource !== source) {
+      this.sortedSource = source;
+      this.sortedMovies = sortMovies(source, this.movieSort);
+    }
+    return this.sortedMovies;
+  }
+
+  protected gridControls(): Safe | '' {
+    if (!super.gridItems().length) return '';
+    const options: { id: MovieSort; label: string }[] = [
+      { id: 'original', label: t('catalog.originalOrder') },
+      { id: 'az', label: t('catalog.sortAz') },
+      { id: 'za', label: t('catalog.sortZa') },
+      { id: 'rating', label: t('catalog.topRated') },
+    ];
+    return html`
+      <div class="catalog-sort" data-key="sort" data-nav-container>
+        <span class="catalog-sort-label">${t('catalog.sortBy')}</span>
+        <div class="toggle-group" role="group" aria-label="${t('catalog.sortBy')}">
+          ${options.map((option) => html`
+            <button class="toggle-option ${this.movieSort === option.id ? 'active' : ''}"
+                    data-focusable data-key="sort:${option.id}" data-movie-sort="${option.id}"
+                    aria-pressed="${this.movieSort === option.id}">${option.label}</button>
+          `)}
+        </div>
+      </div>`;
+  }
+
+  protected categoryIcon(category: VodCategory): string {
+    return movieCategoryIcon(this.categoryLabel(category));
+  }
+
+  protected categoryLabel(category: VodCategory): string {
+    const label = super.categoryLabel(category);
+    const service = streamingCategory(category.name);
+    return service && !streamingCategory(label) ? `${service} · ${label}` : label;
+  }
+
+  protected categorySections(): { key: string; title: string; categories: VodCategory[] }[] {
+    const regular: VodCategory[] = [];
+    const streaming: VodCategory[] = [];
+    this.categories.forEach((category) => {
+      (streamingCategory(category.name) ? streaming : regular).push(category);
+    });
+    return [
+      ...(streaming.length ? [{ key: 'streaming', title: t('catalog.streaming'), categories: streaming }] : []),
+      ...(regular.length ? [{
+        key: 'all-categories',
+        title: t(streaming.length ? 'parental.categories' : 'catalog.allCategories'),
+        categories: regular,
+      }] : []),
+    ];
+  }
 
   protected loadCategories(
     account: PlaylistEntry,
@@ -178,6 +272,15 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
   }
 
   protected selectExtra(el: HTMLElement): boolean {
+    if (el.dataset.movieSort !== undefined) {
+      const order = el.dataset.movieSort;
+      if (order === 'original' || order === 'az' || order === 'za' || order === 'rating') {
+        this.movieSort = order;
+        this.sortedSource = null;
+        this.refreshGridOrder();
+      }
+      return true;
+    }
     if (el.dataset.watchlistItem !== undefined) {
       const vod = this.watchlistToVod(el.dataset.watchlistItem);
       if (vod) void this.openDetail(vod, true);
