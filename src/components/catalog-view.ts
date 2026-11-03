@@ -21,6 +21,7 @@ import { resolveTrailer, type TrailerKind } from '../services/trailer-service';
 import { morph } from '../utils/morph';
 import { lazySrc } from '../utils/lazy-images';
 import { LruCache } from '../utils/lru';
+import { preloadImage } from '../utils/preload-image';
 import { sharedCategoryPrefix, stripCategoryPrefix } from '../utils/category-prefix';
 import { StorageService } from '../services/storage-service';
 import {
@@ -218,6 +219,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   private heroCarousel: I[] = [];
   private heroCarouselTimer: ReturnType<typeof setTimeout> | null = null;
   private heroController: AbortController | null = null;
+  private prefetchController: AbortController | null = null;
   private heroFetchKey = '';
   private readonly heroMetaCache = new LruCache<string, HeroMeta>(CONFIG.XTREAM.HERO_META_CACHE_ITEMS);
   // The rail element focus last left for the hero; Down returns to it.
@@ -1230,6 +1232,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.cancelCarousel();
     this.heroController?.abort();
     this.heroController = null;
+    this.prefetchController?.abort();
+    this.prefetchController = null;
   }
 
   private scheduleCarousel(): void {
@@ -1263,7 +1267,32 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.heroResume = null;
     this.renderHero();
     this.fetchHeroMeta(item);
+    this.prefetchNextHero();
     this.scheduleCarousel();
+  }
+
+  // Warms the next suggestion's detail info and artwork so it paints at once.
+  private prefetchNextHero(): void {
+    const account = this.account;
+    const index = this.heroItem ? this.heroCarousel.indexOf(this.heroItem) : -1;
+    if (!account || index < 0 || this.heroCarousel.length < 2) return;
+    const item = this.heroCarousel[(index + 1) % this.heroCarousel.length];
+    preloadImage(this.itemPoster(item));
+    const key = this.heroMetaKey(item);
+    const cached = this.heroMetaCache.get(key);
+    if (cached) {
+      preloadImage(cached.backdrop);
+      return;
+    }
+    this.prefetchController?.abort();
+    const controller = new AbortController();
+    this.prefetchController = controller;
+    this.loadHeroMeta(account, item, controller.signal).then((meta) => {
+      if (controller.signal.aborted || !meta) return;
+      preloadImage(meta.backdrop, () => {
+        if (!controller.signal.aborted) this.heroMetaCache.set(key, meta);
+      });
+    }, () => undefined);
   }
 
   // Which suggestion the hero shows; not focusable, so it never takes a key.
@@ -1288,7 +1317,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     const controller = new AbortController();
     this.heroController = controller;
     this.heroFetchKey = key;
-    const done = (meta: HeroMeta | null): void => {
+    const apply = (meta: HeroMeta | null): void => {
       if (controller.signal.aborted) return;
       this.heroController = null;
       // A failed fetch is not cached, so the next visit asks again.
@@ -1297,6 +1326,12 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       if (this.categoryHero() === item && this.account?.id === account.id && this.mode === 'grid') {
         this.renderCategoryHero();
       }
+    };
+    // The backdrop replaces the poster only once it can paint, so it never
+    // blinks in over an empty frame.
+    const done = (meta: HeroMeta | null): void => {
+      if (meta?.backdrop) preloadImage(meta.backdrop, () => apply(meta));
+      else apply(meta);
     };
     this.loadHeroMeta(account, item, controller.signal).then(
       (meta) => done(meta ?? EMPTY_HERO_META),
@@ -1626,6 +1661,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       </div>
     `);
     if (this.heroItem) this.fetchHeroMeta(this.heroItem);
+    this.prefetchNextHero();
     if (this.heroCarouselTimer === null) this.scheduleCarousel();
     if (restoreFocus) {
       this.restoringBrowse = true;

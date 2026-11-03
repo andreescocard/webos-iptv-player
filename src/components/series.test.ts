@@ -27,6 +27,7 @@ const { catalogMock, storageMock, watchlistState, toastMock } = vi.hoisted(() =>
   };
 });
 vi.mock('../services/xtream-catalog', () => catalogMock);
+vi.mock('../utils/preload-image', () => ({ preloadImage: (_url: string, done?: () => void) => done?.() }));
 vi.mock('../services/storage-service', () => ({ StorageService: storageMock }));
 vi.mock('./toast', () => ({ showToast: toastMock.showToast }));
 

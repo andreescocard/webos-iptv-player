@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import type { Action, PlaylistEntry, WatchlistEntry, WatchlistKind } from '../types';
 
-const { catalogMock, storageMock, watchlistState, toastMock, trailerMock } = vi.hoisted(() => {
+const { catalogMock, storageMock, watchlistState, toastMock, trailerMock, preloadMock } = vi.hoisted(() => {
   const watchlistState = { entries: [] as WatchlistEntry[] };
   return {
     catalogMock: { loadVodCategories: vi.fn(), loadVodStreams: vi.fn(), loadVodInfo: vi.fn(), getCatalogFill: vi.fn((): { done: number; total: number } | null => null), onCatalogFillChanged: vi.fn() },
@@ -25,12 +26,14 @@ const { catalogMock, storageMock, watchlistState, toastMock, trailerMock } = vi.
     },
     toastMock: { showToast: vi.fn() },
     trailerMock: { resolveTrailer: vi.fn() },
+    preloadMock: { preloadImage: vi.fn((_url: string, done?: () => void) => done?.()) },
   };
 });
 vi.mock('../services/xtream-catalog', () => catalogMock);
 vi.mock('../services/storage-service', () => ({ StorageService: storageMock }));
 vi.mock('./toast', () => ({ showToast: toastMock.showToast }));
 vi.mock('../services/trailer-service', () => trailerMock);
+vi.mock('../utils/preload-image', () => preloadMock);
 
 import { Movies } from './movies';
 import { Focus, Tier } from '../navigation/focus-scope';
@@ -255,6 +258,27 @@ describe('Movies browse + grid', () => {
         expect(container.querySelector('.catalog-hero-poster')).toBeNull();
         vi.advanceTimersByTime(10000);
       }
+    });
+
+    it('swaps to the next backdrop without a fade, once it is warm', async () => {
+      const held: Array<() => void> = [];
+      preloadMock.preloadImage.mockImplementation((_url, done) => { if (done) held.push(done); });
+      catalogMock.loadVodInfo.mockImplementation((_a: unknown, id: string) => Promise.resolve({
+        plot: '', cast: '', director: '', genre: '', releaseDate: '', durationSecs: 0,
+        poster: '', backdrop: `http://host/b${id}.jpg`, subtitles: [], imdbId: '', tmdbId: '', year: 0,
+      }));
+      await openWith([{ id: '1', name: 'Cat A' }], movies.map((item) => ({
+        ...item, poster: `http://host/${item.streamId}.jpg`,
+      })));
+      const backdrop = () => container.querySelector('.catalog-hero-backdrop')?.getAttribute('src');
+      for (let i = 0; i < 6; i++) { await vi.advanceTimersByTimeAsync(0); held.splice(0).forEach((done) => done()); }
+      expect(backdrop()).toBe('http://host/b21.jpg');
+      const asked = catalogMock.loadVodInfo.mock.calls.map((call) => call[1]);
+      expect(asked).toContain('22');
+      vi.advanceTimersByTime(10000);
+      expect(title()).toBe('Pick 2');
+      expect(backdrop()).toBe('http://host/b22.jpg');
+      expect(readFileSync('css/catalog-view.css', 'utf8')).not.toMatch(/catalog-hero-art[^}]*animation/);
     });
 
     it('rotates five good-rated suggestions every ten seconds, then wraps', async () => {
