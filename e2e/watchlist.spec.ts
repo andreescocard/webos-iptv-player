@@ -310,3 +310,45 @@ test('offers the next episode over the credits and OK skips to it', async ({ pag
   await expect(card).toBeHidden();
   await expect(page.locator('#player-osd .osd-next-episode')).toHaveCount(0);
 });
+
+test('the credits card follows the player menu while paused and keeps the right edge for aiming', async ({ page }) => {
+  await seedWatchlistCatalog(page, [seriesEntry()]);
+  await routeLiveManifest(page);
+  await neuterVideo(page);
+  await page.goto('/');
+
+  await enterTab(page, 'series');
+  await focusAndSelect(page, '#view-series .catalog-tile[data-item-id="1"]');
+  await focusAndSelect(page, '#view-series .episode-row[data-episode-id="101"]');
+  await expect(page.locator('#player-osd .osd-channel-name')).toContainText('Episode One');
+
+  const card = page.locator('#player-up-next');
+  await page.locator('#video-player').evaluate((video) => {
+    Object.defineProperty(video, 'duration', { configurable: true, value: 1800 });
+    Object.defineProperty(video, 'currentTime', { configurable: true, writable: true, value: 1790 });
+    Object.defineProperty(video, 'paused', { configurable: true, value: true });
+    video.dispatchEvent(new Event('timeupdate'));
+  });
+  await expect(card).toBeVisible();
+
+  // With the remote, OK's target wears the focus look.
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(() => card.locator('.up-next-play')
+    .evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe('none');
+
+  // Aiming at the card's right end must not open the menu over it.
+  const box = (await card.boundingBox())!;
+  await page.mouse.move(box.x + box.width - 10, box.y + box.height / 2);
+  await page.mouse.move(box.x + box.width - 5, box.y + box.height / 2);
+  await expect(page.locator('#player-menu')).toBeHidden();
+  await expect(card).toBeVisible();
+
+  // The menu covers the card while open, and the card returns once it closes,
+  // though a paused video fires no timeupdate.
+  await page.mouse.move(1900, 200);
+  await expect(page.locator('#player-menu')).toBeVisible();
+  await expect(card).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#player-menu')).toBeHidden();
+  await expect(card).toBeVisible();
+});

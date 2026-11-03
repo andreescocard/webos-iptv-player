@@ -473,6 +473,12 @@
   cursor: pointer;
 }
 
+/* OK plays the next episode, so with the remote the button wears the focus look. */
+html.keyboard-nav .up-next-play {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px var(--accent-glow), 0 0 20px var(--accent-glow);
+}
+
 /* Player sidebar overlay (Magic Remote / left key) */
 .player-sidebar {
   position: absolute;

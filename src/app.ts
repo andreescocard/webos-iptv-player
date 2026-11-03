@@ -1550,7 +1550,14 @@ class App {
     };
     for (const name of Object.keys(this.views) as ViewName[]) {
       views.set(name, own[name]
-        ?? Focus.register({ id: `view.${name}`, root: this.views[name], leaveFor: { up: 'tabbar' } }));
+        ?? Focus.register({
+          id: `view.${name}`, root: this.views[name], leaveFor: { up: 'tabbar' },
+          // A paused video fires no timeupdate, so a menu over the player re-checks the up-next card.
+          ...(name === 'player' ? {
+            onAcquire: () => this.player.refreshUpNextCard(),
+            onRelease: () => this.player.refreshUpNextCard(),
+          } : {}),
+        }));
     }
     Focus.setBase(() => views.get(current()) ?? null);
     Focus.install();
@@ -1764,6 +1771,8 @@ class App {
       const osdRect = osd?.getBoundingClientRect();
       const overOsd = !!osd && !osd.classList.contains('hidden') && !!osdRect
         && e.clientY >= osdRect.top;
+      // The up-next card reaches the right edge; aiming at it must not open the menu.
+      const overUpNext = !!(e.target as HTMLElement).closest('#player-up-next');
 
       // VOD (movies/series) has no channels and no live menu — only the OSD
       // (title + seek bar) is pointer-revealable; suppress the channel sidebar
@@ -1792,7 +1801,7 @@ class App {
       // Right menu. Live/catch-up and VOD alike; for VOD it shows the VOD action
       // set (Info, Settings) plus any audio/subtitle tracks — the channel rows
       // are hidden, so it's never empty.
-      if (!overOsd && !modal && e.clientX > 1840 && !this.sidebar.visible) {
+      if (!overOsd && !overUpNext && !modal && e.clientX > 1840 && !this.sidebar.visible) {
         this.menu.show();
       } else if (this.menu.visible) {
         const overMenu = !!(e.target as HTMLElement).closest('.player-menu');

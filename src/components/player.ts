@@ -186,6 +186,8 @@ export class Player {
       onPlayNext: () => this.playNextItem(),
       onCancelNext: () => this.cancelNextItem(),
       onVisibilityChange: () => this.updateUpNextCard(),
+      // Hiding the OSD would drop the card out from under a resting pointer.
+      holdOpen: () => this.pointerOnUpNextCard(),
     });
     const upNextEl = container.querySelector<HTMLElement>('#player-up-next');
     if (upNextEl) this.upNextCard = new UpNextCard(upNextEl, () => this.playUpNextNow());
@@ -932,12 +934,28 @@ export class Player {
     const card = this.upNextCard;
     if (!card) return;
     const credits = this.creditsUpNext();
-    if (!credits) this.upNextDismissed = false;
-    const covered = Focus.owner() !== Focus.base();
-    if (!credits || this.upNextDismissed || covered) { card.update(null, 0); return; }
+    if (!credits) {
+      this.upNextDismissed = false;
+      if (card.visible) card.update(null, 0);
+      return;
+    }
+    if (this.upNextDismissed || Focus.owner() !== Focus.base()) { card.update(null, 0); return; }
     const osd = this.container.querySelector<HTMLElement>('#player-osd');
     const bottom = this.osd.isVisible() && osd ? osd.offsetHeight + 40 : 40;
     card.update(credits, bottom);
+  }
+
+  refreshUpNextCard(): void {
+    this.updateUpNextCard();
+  }
+
+  private pointerOnUpNextCard(): boolean {
+    const el = this.container.querySelector<HTMLElement>('#player-up-next');
+    const { x, y } = this.osd.pointerPosition();
+    if (!this.upNextCard?.visible || !el || x === null || y === null
+      || InputMode.current !== 'pointer') return false;
+    const r = el.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
   }
 
   private startNextItem(
@@ -1065,6 +1083,13 @@ export class Player {
       this.onPlaybackStateChanged();
     }
     this.cancelLiveHistoryTimer();
+    if (this.vod && this.upNextCard?.visible) {
+      // The stream dropped in the credits: go on to the episode the card promised.
+      log.warn('VOD playback error in the credits', 'event=playback.vod.error',
+        this.playbackLabel(), 'next=1');
+      this.finishVod(this.vod, false);
+      return;
+    }
     if (this.vod) {
       const v = this.vod;
       this.vod = null;            // so stop() won't overwrite/wipe the resume point on error
