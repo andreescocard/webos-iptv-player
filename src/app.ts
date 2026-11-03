@@ -392,6 +392,9 @@ class App {
     this.enterChannelsAfterUploadSync = StorageService.getPlaylists().length === 0;
     this.bindBundledServiceLifecycle();
     this.bindReminderLifecycle();
+    setInterval(() => {
+      if (!document.hidden && this.isCurrentView('channels')) this.channelList.refreshNowPlaying();
+    }, CONFIG.CHANNEL_PROGRAM_REFRESH_MS);
     // Register a retail-safe callback immediately. If Developer Mode is
     // detected below, the same named activities are replaced with alerts.
     ReminderService.reschedulePending();

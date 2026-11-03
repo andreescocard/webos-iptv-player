@@ -39,6 +39,11 @@ const GROUP_ROW_STRIDE = 68;
 const CHANNEL_OVERSCAN = 12;
 const CHANNEL_VIEWPORT_FALLBACK = 900;
 
+function programmeProgress(programme: Programme): number {
+  return Math.min(100, Math.max(0,
+    (Date.now() - programme.start.getTime()) / (programme.stop.getTime() - programme.start.getTime()) * 100));
+}
+
 type PreviewHintState = 'off' | 'ready' | 'active';
 type RowList = 'group' | 'channel';
 // 'render': a re-render that requests no focus of its own.
@@ -460,6 +465,28 @@ export class ChannelList {
     if (ensureFocus && showingRecent) this.recentToReveal = this.nav.focused?.dataset.key ?? null;
     this.syncScope(ensureFocus ? 'key' : 'render');
   }
+  refreshNowPlaying(): void {
+    if (this.editor.isChannelEditing || this.editor.isManagingFavorites) return;
+    let changed = false;
+    this.container.querySelectorAll<HTMLElement>('.channel-item[data-channel-index]:not(.recent-catchup)')
+      .forEach(row => {
+        if (changed) return;
+        const channel = PlaylistService.channels[Number(row.dataset.channelIndex)];
+        if (!channel) return;
+        const epgId = EpgService.findChannelId(channel);
+        const programme = epgId ? EpgService.getNowPlaying(epgId) : null;
+        const progress = row.querySelector<HTMLElement>('.channel-progress');
+        const start = programme ? String(programme.start.getTime()) : '';
+        if (start !== (progress?.dataset.programmeStart || '')) {
+          changed = true;
+          return;
+        }
+        const fill = progress?.firstElementChild as HTMLElement | null;
+        if (programme && fill) fill.style.width = `${programmeProgress(programme)}%`;
+      });
+    if (changed) this.render(false);
+  }
+
 
   private showChannelScrollbar(main: HTMLElement): void {
     if (!this.container.closest('.has-live-preview')) return;
@@ -962,11 +989,9 @@ export class ChannelList {
   }
 
   private renderNowPlaying(programme: Programme): Safe {
-    const progress = Math.min(100, Math.max(0,
-      (Date.now() - programme.start.getTime()) / (programme.stop.getTime() - programme.start.getTime()) * 100));
     return html`
       <div class="channel-now">${programme.title}</div>
-      <div class="channel-progress" aria-hidden="true"><span style="width:${progress}%"></span></div>
+      <div class="channel-progress" data-programme-start="${programme.start.getTime()}" aria-hidden="true"><span style="width:${programmeProgress(programme)}%"></span></div>
     `;
   }
 

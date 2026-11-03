@@ -936,3 +936,27 @@ test('essential animation mode preserves geometry and continuity', async ({ page
   await expectPreviewGeometry(page);
   expect(await snapshot(page)).toEqual(before);
 });
+
+test('channel program progress advances and rolls over without moving focus or scroll', async ({ page }) => {
+  await setup(page, { enabled: true, epg: true });
+  await expect(page.locator(ROW).first()).toContainText('Program 1');
+  await selectFirst(page);
+  const fill = page.locator(`${ROW} .channel-progress > span`).first();
+  const fraction = () => fill.evaluate(element =>
+    element.getBoundingClientRect().width / element.parentElement!.getBoundingClientRect().width);
+  await expect.poll(fraction).toBeCloseTo(0.5, 2);
+  const position = () => page.evaluate(() => ({
+    key: document.querySelector('#channel-browser .focused')?.getAttribute('data-key'),
+    scroll: document.querySelector('.channel-main')!.scrollTop,
+  }));
+  const before = await position();
+
+  await page.clock.setFixedTime(new Date('2026-09-15T12:30:00Z'));
+  await expect.poll(fraction).toBeCloseTo(0.75, 2);
+  expect(await position()).toEqual(before);
+
+  await page.clock.setFixedTime(new Date('2026-09-15T13:00:00Z'));
+  await expect(page.locator(ROW).first().locator('.channel-now')).toHaveText('Program 2');
+  await expect.poll(fraction).toBeCloseTo(0, 2);
+  expect(await position()).toEqual(before);
+});
