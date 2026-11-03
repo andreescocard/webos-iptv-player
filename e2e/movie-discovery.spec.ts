@@ -194,3 +194,29 @@ test('keeps category hero arrows in the action row and reaches sorting before po
   await page.keyboard.press('ArrowDown');
   await expect(grid.locator('[data-movie-sort="original"]')).toHaveClass(/focused/);
 });
+
+test('reaches related movies below a detail with the D-pad, and Back returns to the first movie', async ({ page }) => {
+  await select(page, '#view-movies .catalog-cat[data-category-id="1"]');
+  await select(page, '#view-movies .catalog-grid [data-item-id="10"]');
+  const detail = page.locator('#view-movies .movies-detail');
+  await expect(detail.locator('.detail-title')).toHaveText('Zulu');
+  const rail = detail.locator('[data-rail-key="related"]');
+  await expect(rail.locator('.catalog-rail-title')).toHaveText('Related Movies');
+  await expect(rail.locator('.catalog-tile-name')).toHaveText([/^(Alpha|Bravo)$/, /^(Alpha|Bravo)$/]);
+  await expect(detail.locator('[data-action="play"]')).toHaveClass(/focused/);
+  await page.keyboard.press('ArrowDown');
+  const first = rail.locator('.catalog-tile').first();
+  await expect(first).toHaveClass(/focused/);
+  await page.keyboard.press('ArrowRight');
+  await expect(rail.locator('.catalog-tile').nth(1)).toHaveClass(/focused/);
+  await page.keyboard.press('ArrowLeft');
+  const name = await first.locator('.catalog-tile-name').textContent();
+  await page.keyboard.press('Enter');
+  await expect(detail.locator('.detail-title')).toHaveText(name!);
+  await expect(rail.locator('.catalog-tile-name')).toContainText(['Zulu']);
+  await expect(detail).toHaveJSProperty('scrollTop', 0);
+  await page.keyboard.press('Escape');
+  await expect(detail.locator('.detail-title')).toHaveText('Zulu');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#view-movies .catalog-grid [data-item-id="10"]')).toHaveClass(/focused/);
+});

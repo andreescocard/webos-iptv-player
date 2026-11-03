@@ -1,4 +1,4 @@
-import type { PlaylistEntry, VodCategory, VodItem, VodInfo, ResumeKind, WatchlistEntry, VodQueueItem } from '../types';
+import type { Action, PlaylistEntry, VodCategory, VodItem, VodInfo, ResumeKind, WatchlistEntry, VodQueueItem } from '../types';
 import { html, Safe } from '../utils/dom';
 import { morph } from '../utils/morph';
 import { StorageService } from '../services/storage-service';
@@ -8,7 +8,10 @@ import { CatalogView, buildFacts, catalogButton, catalogFacts, type CatalogActio
 import { PLAY_ICON, watchlistIcon } from './icons';
 import { showToast } from './toast';
 import { t, tp } from '../i18n';
-import { movieCategoryIcon, randomGoodMovie, sortMovies, streamingCategory, type MovieSort } from '../utils/movie-discovery';
+import {
+  movieCategoryIcon, randomGoodMovie, randomGoodMovies, relatedMovies, sortMovies, streamingCategory, type MovieSort,
+} from '../utils/movie-discovery';
+import { CONFIG } from '../config';
 
 // The Movies section: browse (Continue rail + per-category rails + an "all
 // categories" drill-in) → per-category poster grid → a detail screen with
@@ -33,8 +36,11 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
   private sortedMovies: VodItem[] = [];
   private categorySuggestion: VodItem | null = null;
   private lastSuggestion: { accountId: string; itemId: string } | null = null;
+  private related: VodItem[] = [];
+  // Details a related title was opened from, for Back.
+  private detailHistory: { vod: VodItem; fromWatchlist: boolean }[] = [];
 
-  protected initialHero(): VodItem | null {
+  protected heroCarouselItems(): VodItem[] {
     const seen = new Set<string>();
     const candidates: VodItem[] = [];
     Object.keys(this.itemsByCategory).forEach((categoryId) => {
@@ -44,17 +50,23 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
         candidates.push(item);
       });
     });
-    return this.suggest(candidates) ?? super.initialHero();
+    const picks = randomGoodMovies(candidates, CONFIG.XTREAM.HERO_CAROUSEL_ITEMS, this.previousSuggestion());
+    this.remember(picks[0] ?? null);
+    return picks;
   }
 
   private suggest(items: VodItem[]): VodItem | null {
-    const previous = this.lastSuggestion?.accountId === this.account?.id
-      ? this.lastSuggestion?.itemId : undefined;
-    const item = randomGoodMovie(items, previous);
-    if (item && this.account) {
-      this.lastSuggestion = { accountId: this.account.id, itemId: item.streamId };
-    }
+    const item = randomGoodMovie(items, this.previousSuggestion());
+    this.remember(item);
     return item;
+  }
+
+  private previousSuggestion(): string | undefined {
+    return this.lastSuggestion?.accountId === this.account?.id ? this.lastSuggestion?.itemId : undefined;
+  }
+
+  private remember(item: VodItem | null): void {
+    if (item && this.account) this.lastSuggestion = { accountId: this.account.id, itemId: item.streamId };
   }
 
   protected onGridOpened(): void {
@@ -200,6 +212,15 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
     this.detailController = null;
     this.currentVod = null;
     this.openedFromWatchlist = false;
+    this.related = [];
+    this.detailHistory = [];
+  }
+
+  protected detailBack(): boolean {
+    const previous = this.detailHistory.pop();
+    if (!previous) return false;
+    void this.openDetail(previous.vod, previous.fromWatchlist, false);
+    return true;
   }
   protected onRequestSessionReset(): void {
     this.detailController?.abort();
@@ -253,6 +274,17 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
     `;
   }
 
+  private relatedTile(vod: VodItem): Safe {
+    return html`
+      <div class="catalog-tile" data-focusable data-key="r:${vod.streamId}"
+           data-related-item="${vod.streamId}" data-category-id="${vod.categoryId}">
+        <div class="catalog-poster-wrap">${this.posterCell(vod.name, vod.poster)}${
+          this.itemLockBadge(vod.categoryId, vod.streamId)}</div>
+        <div class="catalog-tile-name">${vod.name}</div>
+      </div>
+    `;
+  }
+
   private watchlistToVod(streamId: string): VodItem | null {
     const entry = this.visibleWatchlist('vod')
       .find((item) => item.itemId === streamId);
@@ -271,6 +303,15 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
     };
   }
 
+  // Down from the buttons starts the related rail at its first title.
+  protected moveExtraFocus(action: Action): boolean {
+    if (action !== 'down' || this.mode !== 'detail' || !this.current()?.closest('.detail-actions')) return false;
+    const first = this.layer('detail').querySelector<HTMLElement>('[data-rail-key="related"] [data-focusable]');
+    if (!first) return false;
+    this.place(first, 'key');
+    return true;
+  }
+
   protected selectExtra(el: HTMLElement): boolean {
     if (el.dataset.movieSort !== undefined) {
       const order = el.dataset.movieSort;
@@ -284,6 +325,11 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
     if (el.dataset.watchlistItem !== undefined) {
       const vod = this.watchlistToVod(el.dataset.watchlistItem);
       if (vod) void this.openDetail(vod, true);
+      return true;
+    }
+    if (el.dataset.relatedItem !== undefined) {
+      const vod = this.related.find((item) => item.streamId === el.dataset.relatedItem);
+      if (vod) void this.openDetail(vod, false, true);
       return true;
     }
     if (el.dataset.action === 'play' || el.dataset.action === 'resume') {
@@ -316,9 +362,14 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
     this.renderDetail();
   }
 
-  protected async openDetail(vod: VodItem, fromWatchlist = false): Promise<void> {
+  protected async openDetail(vod: VodItem, fromWatchlist = false, fromRelated = false): Promise<void> {
     const account = this.account;
     if (!account || !this.requestSignal) return;
+    if (fromRelated && this.currentVod) {
+      this.detailHistory.push({ vod: this.currentVod, fromWatchlist: this.openedFromWatchlist });
+    } else if (this.mode !== 'detail') {
+      this.detailHistory = [];
+    }
     this.detailController?.abort();
     this.detailController = new AbortController();
     const signal = this.detailController.signal;
@@ -326,7 +377,9 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
     this.currentVod = vod;
     this.enterDetail();
     this.currentInfo = null;
+    this.related = [];
     this.renderDetail();
+    void this.loadRelated(vod, signal);
     try {
       this.currentInfo = await loadVodInfo(account, vod.streamId, signal);
     } catch (err) {
@@ -334,6 +387,20 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
       this.currentInfo = null;
     }
     if (this.mode === 'detail' && this.currentVod === vod) this.renderDetail();
+  }
+
+  private async loadRelated(vod: VodItem, signal: AbortSignal): Promise<void> {
+    if (!vod.categoryId) return;
+    let items: VodItem[];
+    try {
+      items = await this.categoryItems(vod.categoryId, signal);
+    } catch (err) {
+      this.requestFailed('Related movies load', err, signal);
+      return;
+    }
+    if (signal.aborted || this.currentVod !== vod) return;
+    this.related = relatedMovies(vod, items, CONFIG.XTREAM.RAIL_ITEMS);
+    if (this.mode === 'detail' && this.related.length) this.renderDetail();
   }
 
   private play(resume: boolean): void {
@@ -416,17 +483,22 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
 
     morph(this.layer('detail'), html`
       <div class="catalog-view movies-detail" data-nav-container>
-        <div class="detail-poster-wrap">${this.posterCell(vod.name, poster)}</div>
-        <div class="detail-body">
-          <h1 class="detail-title">${vod.name}</h1>
-          <div class="detail-meta">${catalogFacts(facts)}</div>
-          ${this.detailPlot(info?.plot ?? '')}
-          ${info?.cast ? html`<div class="detail-cast"><span class="detail-label">${t('catalog.cast')}</span> ${info.cast}</div>` : ''}
-          ${info?.director ? html`<div class="detail-cast"><span class="detail-label">${t('catalog.director')}</span> ${info.director}</div>` : ''}
-          <div class="detail-actions">
-            ${actions.concat(this.extraDetailActions()).map((action) => catalogButton(action, 'detail'))}
+        <div class="movies-detail-head" data-key="detail-head">
+          <div class="detail-poster-wrap">${this.posterCell(vod.name, poster)}</div>
+          <div class="detail-body">
+            <h1 class="detail-title">${vod.name}</h1>
+            <div class="detail-meta">${catalogFacts(facts)}</div>
+            ${this.detailPlot(info?.plot ?? '')}
+            ${info?.cast ? html`<div class="detail-cast"><span class="detail-label">${t('catalog.cast')}</span> ${info.cast}</div>` : ''}
+            ${info?.director ? html`<div class="detail-cast"><span class="detail-label">${t('catalog.director')}</span> ${info.director}</div>` : ''}
+            <div class="detail-actions">
+              ${actions.concat(this.extraDetailActions()).map((action) => catalogButton(action, 'detail'))}
+            </div>
           </div>
         </div>
+        ${this.related.length
+          ? this.rail('related', t('catalog.relatedMovies'), this.related.map((item) => this.relatedTile(item)))
+          : ''}
       </div>
     `);
     if (this.measureDetailPlot()) return;

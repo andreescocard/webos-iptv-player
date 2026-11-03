@@ -102,6 +102,8 @@ export const DE_MESSAGES = {
   'epg.reminderSet': 'Erinnerung eingestellt',
   'epg.catchupUnavailable': 'Diese Sendung ist nicht als Replay verfügbar.',
   'catalog.continueWatching': 'Weiterschauen',
+  'catalog.relatedMovies': 'Ähnliche Filme',
+  'catalog.relatedSeries': 'Ähnliche Serien',
   'catalog.allCategories': 'Alle Kategorien',
   'catalog.seeAll': 'Alle anzeigen',
   'catalog.sortBy': 'Sortieren nach',

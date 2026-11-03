@@ -91,6 +91,14 @@ html[data-animation="essential"] .catalog-hero-art { animation: none; }
 .catalog-hero-episode { margin-top: 12px; max-width: 640px; }
 .catalog-hero-episode-name { font-size: 28px; font-weight: 600; color: var(--text-primary); }
 .catalog-hero-actions { display: flex; gap: 16px; margin-top: 24px; }
+.catalog-hero-dots { display: flex; align-items: center; margin-top: 24px; }
+.catalog-hero-dot {
+  width: 12px; height: 12px; margin-right: 12px; border-radius: 6px;
+  background: var(--text-secondary); opacity: 0.5;
+  transition: width 240ms ease-out, opacity 240ms ease-out;
+}
+.catalog-hero-dot.active { width: 36px; background: var(--accent, #3ea6ff); opacity: 1; }
+html[data-animation="essential"] .catalog-hero-dot { transition: none; }
 .catalog-fill {
   margin-top: 16px; font-size: 22px; color: var(--text-secondary);
 }
@@ -225,7 +233,8 @@ html[data-animation="essential"] .catalog-tile { transition: none; }
   overflow: hidden;
 }
 
-.movies-detail { display: flex; gap: 56px; }
+.movies-detail-head { display: flex; gap: 56px; }
+.movies-detail > .catalog-rail { margin-top: 40px; }
 .detail-poster-wrap {
   width: 360px; height: 540px; flex: 0 0 auto;
   border-radius: 16px; overflow: hidden; background: var(--catalog-surface);

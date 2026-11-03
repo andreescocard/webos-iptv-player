@@ -125,7 +125,7 @@ html.q-no-flex-gap .search-list > * + * { margin-top: 8px; }
 html.q-no-flex-gap .search-channel-row > * + * { margin-left: 24px; }
 html.q-no-flex-gap .catalog-hero-actions > * + * { margin-left: 16px; }
 html.q-no-flex-gap .catalog-rail-track > * + * { margin-left: 20px; }
-html.q-no-flex-gap .movies-detail > * + * { margin-left: 56px; }
+html.q-no-flex-gap .movies-detail-head > * + * { margin-left: 56px; }
 html.q-no-flex-gap .detail-actions > * + * { margin-left: 12px; }
 html.q-no-flex-gap .detail-btn > * + * { margin-left: 10px; }
 html.q-no-flex-gap .series-detail-head > * + * { margin-left: 56px; }

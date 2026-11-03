@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { VodItem } from '../types';
 import { TAG_ICON } from '../components/icons';
-import { movieCategoryIcon, randomGoodMovie, sortMovies, streamingCategory } from './movie-discovery';
+import {
+  movieCategoryIcon, randomGoodMovie, randomGoodMovies, relatedMovies, sortMovies, streamingCategory,
+} from './movie-discovery';
 
 function movie(streamId: string, name = streamId, rating = ''): VodItem {
   return {
@@ -56,6 +58,31 @@ describe('sortMovies', () => {
     const item = movie('item-alpha', 'Alpha', '8');
     expect(sortMovies([], 'rating')).toEqual([]);
     expect(sortMovies([item, item], 'rating')).toEqual([item, item]);
+  });
+});
+
+describe('randomGoodMovies', () => {
+  it('picks distinct good movies up to the count, the previous one last', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const previous = movie('item-previous', 'Alpha', '9');
+    const items = [previous, movie('item-low', 'Bravo', '5'), movie('item-b', 'Charlie', '8'),
+      movie('item-c', 'Delta', '7'), movie('item-b', 'Charlie', '8')];
+    expect(randomGoodMovies(items, 5, previous.streamId).map((item) => item.streamId))
+      .toEqual(['item-b', 'item-c', 'item-previous']);
+    expect(randomGoodMovies(items, 2).map((item) => item.streamId)).toEqual(['item-previous', 'item-b']);
+    expect(randomGoodMovies([], 5)).toEqual([]);
+  });
+});
+
+describe('relatedMovies', () => {
+  it('leaves out the movie itself and repeats, good-rated first, up to the limit', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const current = movie('item-current', 'Alpha', '9');
+    const items = [movie('item-a', 'Bravo', ''), current, movie('item-b', 'Charlie', '8'),
+      movie('item-a', 'Bravo', ''), movie('item-c', 'Delta', '6'), movie('item-d', 'Echo', '')];
+    expect(relatedMovies(current, items, 3).map((item) => item.streamId))
+      .toEqual(['item-b', 'item-a', 'item-c']);
+    expect(relatedMovies(current, [current], 3)).toEqual([]);
   });
 });
 
