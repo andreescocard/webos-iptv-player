@@ -367,6 +367,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
   // Landscape artwork the Continue entry brings itself (an episode still), else ''.
   protected heroResumeArt(_item: I, _entry: ResumeEntry): string { return ''; }
   protected itemRating(_item: I): string { return ''; }
+  protected smartKinds(): SmartKind[] { return SMART_ORDER; }
   protected readonly preserveInitialHero: boolean = false;
   protected initialHero(): I | null {
     return this.heroFromResume() ?? this.railGroups[0]?.items[0] ?? this.heroFallback();
@@ -543,7 +544,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
   private organize(): void {
     const byId = new Map(this.categories.map((c) => [c.id, c] as [string, C]));
     const smart: Collection<C>[] = [];
-    SMART_ORDER.forEach((kind) => {
+    this.smartKinds().forEach((kind) => {
       const items = this.smartItems(kind);
       const id = SMART_IDS[kind];
       if (!items.length) {
