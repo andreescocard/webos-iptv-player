@@ -61,11 +61,11 @@ Current version: **1.19.0** — [Release notes](CHANGELOG.md).
 
 **Live TV & on-demand**
 
-- **Program guide (EPG)** — three-pane guide with an auto-derived date range, per-source time correction, and caching for instant reopen
+- **Program guide (EPG)** — readable channel schedules with a compact date selector and a fixed detail panel for the selected program; auto-derived date range, per-source time correction, and caching for instant reopen
 - **Channel health** — check live streams and mark them as healthy, suspect, or unavailable
 - **Reminders** — flag an upcoming program and get notified at air time, even with the app closed, to tune straight in
 - **Recently Watched** — return to recent live channels or resume partially watched catch-up programs
-- **Live preview** — keep live playback beside the channel list while browsing, with program info and quick controls
+- **Live preview** — browse a wider channel list with current-program progress beside a 16:9 preview, program info, and quick controls
 - **Movies & Series** — browse an Xtream account's VOD catalogs, with Continue Watching (one card per series, moving on to the next episode) and account-scoped Watchlist rails
 - **Movie suggestions** — a random movie rated at least 7/10 from loaded categories appears above the Watchlist when entering Movies; opening a category shows a suggestion from that category, using the same banner layout as Series. Ratings come from the IPTV provider, not a verified IMDb lookup.
 - **Movie categories** — icon cards and a complete category index, including small catalogs. Explicitly service-labeled categories appear under Streaming; those labels do not confirm external availability. Category names remain readable across themes and at 150% text size.

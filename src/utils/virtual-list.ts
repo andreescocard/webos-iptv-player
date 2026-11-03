@@ -12,7 +12,7 @@ export interface VirtualRange {
 export class VirtualList {
   private offset = 0;
   private leading = 0;
-  private readonly itemSize: number | null;
+  private itemSize: number | null;
   private sizes = new Float64Array(0);
   private offsets = new Float64Array(1);
   private readonly overscan: number;
@@ -53,6 +53,14 @@ export class VirtualList {
   private get viewStart(): number {
     return this.offset - this.leading;
   }
+  setItemSize(size: number): void {
+    if (this.itemSize === null) {
+      throw new Error('setItemSize is only available for fixed-size lists');
+    }
+    if (size <= 0) throw new RangeError('itemSize must be greater than zero');
+    this.itemSize = size;
+  }
+
 
   setItemSizes(sizes: number[]): void {
     if (this.itemSize !== null) {

@@ -161,8 +161,8 @@ describe('Movies browse + grid', () => {
       await openWith([{ id: '1', name: 'Cat A' }], [m1, m2]);
       await settle();
       expect(title()).toBe('Movie One');
-      expect(container.querySelector('.catalog-hero-poster')?.getAttribute('src')).toBe('http://host/p1.jpg');
-      expect(container.querySelector('.catalog-hero-backdrop')).toBeNull();
+      expect(container.querySelector('.catalog-hero-backdrop')?.getAttribute('src')).toBe('http://host/p1.jpg');
+      expect(container.querySelector('.catalog-hero-poster')).toBeNull();
       expect(Array.from(container.querySelectorAll('.catalog-hero-meta .catalog-fact')).map((el) => el.textContent)).toEqual(['7.5']);
       expect(container.querySelector('.catalog-hero-plot')).toBeNull();
       expect(container.querySelectorAll('.catalog-hero-actions [data-hero-action]')).toHaveLength(3);
@@ -243,6 +243,20 @@ describe('Movies browse + grid', () => {
     });
     afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
+    it('keeps every suggestion full-bleed while its backdrop is loading', async () => {
+      catalogMock.loadVodInfo.mockImplementation(() => new Promise(() => undefined));
+      await openWith([{ id: '1', name: 'Cat A' }], movies.map((item) => ({
+        ...item, poster: `http://host/${item.streamId}.jpg`,
+      })));
+      for (let i = 0; i < 5; i++) {
+        expect(title()).toBe(`Pick ${i + 1}`);
+        expect(container.querySelector('.catalog-hero-backdrop')?.getAttribute('src'))
+          .toBe(`http://host/2${i + 1}.jpg`);
+        expect(container.querySelector('.catalog-hero-poster')).toBeNull();
+        vi.advanceTimersByTime(10000);
+      }
+    });
+
     it('rotates five good-rated suggestions every ten seconds, then wraps', async () => {
       await openWith([{ id: '1', name: 'Cat A' }], [vod('19', 'Unrated'), ...movies]);
       expect(container.querySelectorAll('.catalog-hero-dot')).toHaveLength(5);
@@ -269,7 +283,7 @@ describe('Movies browse + grid', () => {
       expect(title()).toBe('Pick 2');
     });
 
-    it('stops once focus picks a title, and waits while the section is hidden', async () => {
+    it('waits while the section is hidden', async () => {
       await openWith([{ id: '1', name: 'Cat A' }], movies);
       container.classList.add('hidden');
       vi.advanceTimersByTime(30000);
@@ -277,13 +291,28 @@ describe('Movies browse + grid', () => {
       container.classList.remove('hidden');
       vi.advanceTimersByTime(10000);
       expect(title()).toBe('Pick 2');
-      container.querySelector(`.catalog-tile[data-item-id="26"]`)!
-        .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
-      expect(container.querySelector('.catalog-hero-dots')).toBeNull();
+    });
+
+    it('returns from Continue Watching to the five suggestions after ten idle seconds', async () => {
+      storageMock.getResumeList.mockReturnValue([{
+        accountId: 'x1', kind: 'vod', itemId: '26', categoryId: '1', name: 'Pick 6',
+        poster: '', ext: 'mp4', position: 100, duration: 6000, updatedAt: 1,
+      }]);
+      const { view } = await openWith([{ id: '1', name: 'Cat A' }], movies);
+      const tile = container.querySelector('.catalog-rail[data-rail-key="continue"] .catalog-tile')!;
+      tile.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
       vi.advanceTimersByTime(500);
       expect(title()).toBe('Pick 6');
-      vi.advanceTimersByTime(60000);
+      expect(container.querySelector('.catalog-hero-dots')).toBeNull();
+      vi.advanceTimersByTime(9000);
+      view.handleAction('left');
+      vi.advanceTimersByTime(9999);
       expect(title()).toBe('Pick 6');
+      vi.advanceTimersByTime(1);
+      expect(title()).toBe('Pick 1');
+      expect(container.querySelectorAll('.catalog-hero-dot')).toHaveLength(5);
+      vi.advanceTimersByTime(10000);
+      expect(title()).toBe('Pick 2');
     });
 
     it('keeps a single suggestion still, without dots', async () => {

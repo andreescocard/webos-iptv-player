@@ -97,8 +97,6 @@ export const RU_MESSAGES = {
     many: '{count} передач',
     other: '{count} передачи',
   },
-  'epg.aired': 'Прошедшие',
-  'epg.upcoming': 'Предстоящие',
   'epg.reminder': 'Напоминание',
   'epg.noData': 'Информация о передаче недоступна.',
   'epg.watched': 'Просмотрено',

@@ -389,6 +389,77 @@ test.describe('Guide pointer and keys', () => {
     }).toBe(true);
   }
 
+  test('changing text size keeps channel and guide rows readable and separated', async ({ page }) => {
+    await openGuide(page, i => `Description ${i}. ` + 'Additional program details. '.repeat(12));
+    for (const size of ['150', '80', '100']) {
+      await enterTab(page, 'settings');
+      await page.locator('[data-settings-target="appearance"]').click();
+      await page.locator('#text-size .dropdown-trigger').click();
+      await page.locator(`#text-size .dropdown-option[data-dropdown-value="${size}"]`).click();
+      await page.locator('#save-settings').click();
+      const clipped = await page.locator('#view-channels .channel-item').evaluateAll(rows =>
+        rows.some(row => {
+          const box = row.getBoundingClientRect();
+          return Array.from(row.querySelectorAll('.channel-name, .channel-now, .channel-progress'))
+            .some(child => {
+              const content = child.getBoundingClientRect();
+              return content.top < box.top || content.bottom > box.bottom;
+            });
+        }));
+      expect(clipped, `Live rows at ${size}%`).toBe(false);
+
+      await enterTab(page, 'epg');
+      await programmesSettled(page);
+      const overlaps = await page.locator('#epg-programmes .epg-programme-item').evaluateAll(rows => {
+        const boxes = rows.map(row => row.getBoundingClientRect());
+        return boxes.slice(1).some((box, i) => box.top < boxes[i].bottom - 1);
+      });
+      expect(overlaps, `Guide rows at ${size}%`).toBe(false);
+      const clippedTimes = await page.locator('.epg-prog-time-col').evaluateAll(columns =>
+        columns.some(column => {
+          const box = column.getBoundingClientRect();
+          return Array.from(column.children).some(child => child.getBoundingClientRect().left < box.left - 1);
+        }));
+      expect(clippedTimes, `Guide times at ${size}%`).toBe(false);
+    }
+  });
+
+  test('program descriptions follow selection without overlapping the virtualized schedule', async ({ page }) => {
+    await openGuide(page, i => `Description ${i}. ` + 'Additional program details. '.repeat(12));
+    await programmesSettled(page);
+    const descriptions = page.locator('#view-epg .epg-prog-desc:visible');
+    await expect(descriptions).toHaveCount(1);
+    await expect(descriptions).toContainText('Description 0.');
+
+    await page.keyboard.press('ArrowRight');
+    for (let i = 1; i <= 25; i++) {
+      await page.keyboard.press('ArrowDown');
+    }
+    await programmesSettled(page);
+    await expect(descriptions).toHaveCount(1);
+    await expect(descriptions).toContainText('Description 25.');
+    await expect(page.locator('#epg-programmes .focused')).toHaveAttribute('data-prog-idx', '25');
+
+    await page.keyboard.press('ArrowUp');
+    await programmesSettled(page);
+    await expect(descriptions).toHaveCount(1);
+    await expect(descriptions).toContainText('Description 24.');
+    const next = page.locator('#epg-programmes [data-prog-idx="25"]');
+    await next.scrollIntoViewIfNeeded();
+    await programmesSettled(page);
+    const nextBox = (await next.boundingBox())!;
+    await page.mouse.move(0, 0);
+    await page.mouse.move(nextBox.x + nextBox.width / 2, nextBox.y + nextBox.height / 2, { steps: 2 });
+    await programmesSettled(page);
+    await expect(descriptions).toContainText('Description 25.');
+
+    const gaps = await page.locator('#epg-programmes .epg-programme-item').evaluateAll(rows => {
+      const boxes = rows.map(row => row.getBoundingClientRect());
+      return boxes.slice(1).map((box, i) => box.top - boxes[i].bottom);
+    });
+    expect(gaps.every(gap => gap >= -1 && gap <= 1)).toBe(true);
+  });
+
   test('hovering a programme moves the ring off the channel, which stays selected', async ({ page }) => {
     await openGuide(page);
     const channel = page.locator('#view-epg .epg-channel-item.selected');
@@ -480,7 +551,10 @@ test.describe('Guide pointer and keys', () => {
     const last = page.locator('#epg-programmes .epg-programme-item', { hasText: 'Show 47' });
     await expect.poll(async () => {
       await list.evaluate((el) => { el.scrollTop = el.scrollHeight; });
-      return last.isVisible();
+      const rowBox = await last.boundingBox();
+      const listBox = await list.boundingBox();
+      return !!rowBox && !!listBox && rowBox.y >= listBox.y
+        && rowBox.y + rowBox.height <= listBox.y + listBox.height + 1;
     }).toBe(true);
     const box = (await last.boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 2 });

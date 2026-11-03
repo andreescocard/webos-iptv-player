@@ -97,8 +97,6 @@ export const PL_MESSAGES = {
     many: '{count} programów',
     other: '{count} programu',
   },
-  'epg.aired': 'Zakończone',
-  'epg.upcoming': 'Nadchodzące',
   'epg.reminder': 'Przypomnienie',
   'epg.noData': 'Brak informacji o programie.',
   'epg.watched': 'Obejrzano',

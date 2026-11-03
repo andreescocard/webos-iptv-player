@@ -96,8 +96,6 @@ export const EN_MESSAGES = {
     one: '{count} program',
     other: '{count} programs',
   },
-  'epg.aired': 'Aired',
-  'epg.upcoming': 'Upcoming',
   'epg.reminder': 'Reminder',
   'epg.noData': 'No program information available.',
   'epg.watched': 'Watched',

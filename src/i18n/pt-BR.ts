@@ -93,8 +93,6 @@ export const PT_BR_MESSAGES = {
     one: '{count} programa',
     other: '{count} programas',
   },
-  'epg.aired': 'Exibido',
-  'epg.upcoming': 'Em breve',
   'epg.reminder': 'Lembrete',
   'epg.noData': 'Nenhuma informação de programação disponível.',
   'epg.watched': 'Assistido',

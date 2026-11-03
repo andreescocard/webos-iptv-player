@@ -91,8 +91,6 @@ export const TR_MESSAGES = {
   'epg.programCount': {
     other: '{count} program',
   },
-  'epg.aired': 'Yayınlandı',
-  'epg.upcoming': 'Yakında',
   'epg.reminder': 'Hatırlatıcı',
   'epg.noData': 'Program bilgisi yok.',
   'epg.watched': 'İzlendi',

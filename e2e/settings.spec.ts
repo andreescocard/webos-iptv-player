@@ -243,7 +243,6 @@ test.describe('Settings navigation', () => {
         <span class="playing-indicator"></span>
         <div class="search-history-scrim"></div>
         <div class="search-history-panel"></div>
-        <div class="epg-programme-item state-live"></div>
         <div class="player-sidebar visible channels-only">
           <div class="sidebar-picker-arrow"><svg></svg></div>
           <div class="sidebar-ch-item">
@@ -272,10 +271,6 @@ test.describe('Settings navigation', () => {
         historyPanel: getComputedStyle(
           motionFixtures.querySelector('.search-history-panel')!,
         ).animationName,
-        epgLiveRail: getComputedStyle(
-          motionFixtures.querySelector('.epg-programme-item')!,
-          '::before',
-        ).animationName,
         groupPicker: getComputedStyle(
           motionFixtures.querySelector('.sidebar-picker-arrow svg')!,
         ).animationName,
@@ -300,7 +295,6 @@ test.describe('Settings navigation', () => {
     expect(durations.playingIndicator).toBe('none');
     expect(durations.historyScrim).toBe('none');
     expect(durations.historyPanel).toBe('none');
-    expect(durations.epgLiveRail).toBe('epgRailPulse');
     expect(durations.groupPicker).toBe('group-picker-nudge');
     expect(durations.channelMarquee).toBe('marquee-bounce');
     expect(durations.programmeMarquee).toBe('marquee-bounce');

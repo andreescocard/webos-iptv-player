@@ -97,8 +97,6 @@ export const UK_MESSAGES = {
     many: '{count} програм',
     other: '{count} програми',
   },
-  'epg.aired': 'Минулі',
-  'epg.upcoming': 'Майбутні',
   'epg.reminder': 'Нагадування',
   'epg.noData': 'Інформація про програму недоступна.',
   'epg.watched': 'Переглянуто',

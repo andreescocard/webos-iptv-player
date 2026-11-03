@@ -93,8 +93,6 @@ export const IT_MESSAGES = {
     one: '{count} programma',
     other: '{count} programmi',
   },
-  'epg.aired': 'Trasmesso',
-  'epg.upcoming': 'In arrivo',
   'epg.reminder': 'Promemoria',
   'epg.noData': 'Nessuna informazione disponibile sul programma.',
   'epg.watched': 'Visto',

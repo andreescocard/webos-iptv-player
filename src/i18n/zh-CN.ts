@@ -91,8 +91,6 @@ export const ZH_CN_MESSAGES = {
   'epg.programCount': {
     other: '{count} 个节目',
   },
-  'epg.aired': '已播出',
-  'epg.upcoming': '即将播出',
   'epg.reminder': '提醒',
   'epg.noData': '暂无节目信息。',
   'epg.watched': '已观看',

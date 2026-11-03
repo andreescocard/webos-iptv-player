@@ -214,7 +214,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   protected heroResume: ResumeEntry | null = null;
   private heroPendingResume: ResumeEntry | null = null;
   private heroTimer: ReturnType<typeof setTimeout> | null = null;
-  // Suggestions the hero rotates through until focus picks a title.
+  // Suggestions survive a focused tile's temporary preview.
   private heroCarousel: I[] = [];
   private heroCarouselTimer: ReturnType<typeof setTimeout> | null = null;
   private heroController: AbortController | null = null;
@@ -1191,10 +1191,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   // for every tile it passes, so the hero follows only once focus rests.
   private followHero(item: I, resume: ResumeEntry | null = null): void {
     this.cancelHeroTimer();
-    if (this.heroCarousel.length) {
-      this.stopCarousel();
-      this.renderHero();
-    }
+    this.scheduleCarousel();
     if (this.heroItem && this.itemId(this.heroItem) === this.itemId(item)
       && (this.heroResume?.itemId ?? '') === (resume?.itemId ?? '')) {
       this.heroPending = null;
@@ -1250,19 +1247,17 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.heroCarouselTimer = null;
   }
 
-  private stopCarousel(): void {
-    this.cancelCarousel();
-    this.heroCarousel = [];
-  }
-
   private advanceCarousel(): void {
     const index = this.heroItem ? this.heroCarousel.indexOf(this.heroItem) : -1;
-    if (this.mode !== 'browse' || index < 0) return;
+    if (this.mode !== 'browse' || this.heroCarousel.length < 2) return;
     // Playback, a trailer, or a hidden section holds the shown title.
     if (this.container.closest('.hidden') || trailerOverlay.visible) {
       this.scheduleCarousel();
       return;
     }
+    this.cancelHeroTimer();
+    this.heroPending = null;
+    this.heroPendingResume = null;
     const item = this.heroCarousel[(index + 1) % this.heroCarousel.length];
     this.heroItem = item;
     this.heroResume = null;
@@ -1329,8 +1324,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   private heroArt(item: I | null = this.heroItem, resume: ResumeEntry | null = this.heroResume): Safe {
     const meta = item ? this.heroMetaCache.get(this.heroMetaKey(item)) : undefined;
     const still = item && resume ? this.heroResumeArt(item, resume) : '';
-    const backdrop = still || meta?.backdrop || '';
     const poster = item ? this.itemPoster(item) : '';
+    const backdrop = still || meta?.backdrop || (this.parentalKind === 'vod' ? poster : '');
     const scrim = html`<div class="catalog-hero-scrim" data-key="scrim"></div>`;
     if (backdrop) {
       return html`
@@ -1338,7 +1333,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
              src="${backdrop}" alt="" onerror="this.style.display='none'">
         ${scrim}`;
     }
-    // A portrait poster is never stretched to fill a landscape hero.
+    // Series keep a portrait fallback when no episode still or backdrop exists.
     if (poster) {
       return html`
         <div class="catalog-hero-glow" data-key="glow"></div>

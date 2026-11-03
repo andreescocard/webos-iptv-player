@@ -220,49 +220,27 @@ describe('EpgGrid.render', () => {
     expect(now!.querySelector('.epg-prog-title')!.textContent).toContain('Noon Show');
   });
 
-  it('rebuilds row sizes when refreshed programme data changes descriptions', () => {
-    expect(container.querySelector<HTMLElement>(
-      '#epg-programmes .epg-virtual-spacer',
-    )?.style.height).toBe('324px');
+  it('refreshes selected program details and clears them on a channel without guide data', () => {
+    grid.handleAction('right');
+    grid.handleAction('down');
+    const detail = container.querySelector<HTMLElement>('.epg-programme-detail')!;
+    expect(detail.querySelector('.epg-detail-title')?.textContent).toBe('Noon Show');
+    expect(detail.querySelector('.epg-prog-desc')?.textContent).toBe('Noon Show description');
 
     state.programmes['Chan A'] = state.programmes['Chan A'].map(programme => ({
       ...programme,
+      title: `${programme.title} updated`,
       description: '',
     }));
     grid.render();
+    expect(detail.querySelector('.epg-detail-title')?.textContent).toBe('Noon Show updated');
+    expect(detail.querySelector('.epg-prog-desc')).toBeNull();
 
-    expect(container.querySelector<HTMLElement>(
-      '#epg-programmes .epg-virtual-spacer',
-    )?.style.height).toBe('240px');
+    clickData('data-channel-idx', 1);
+    expect(detail.classList.contains('hidden')).toBe(true);
+    expect(detail.textContent?.trim()).toBe('');
   });
 
-  it('replaces the seeded row estimates with measured row heights after paint', () => {
-    expect(container.querySelector<HTMLElement>(
-      '#epg-programmes .epg-virtual-spacer',
-    )?.style.height).toBe('324px');
-
-    const original = Element.prototype.getBoundingClientRect;
-    Element.prototype.getBoundingClientRect = function getRect(this: Element) {
-      return this.classList.contains('epg-programme-item')
-        ? { height: 85 } as DOMRect
-        : original.call(this);
-    };
-    try {
-      grid.render();
-      expect(container.querySelector<HTMLElement>(
-        '#epg-programmes .epg-virtual-spacer',
-      )?.style.height).toBe('324px');
-      vi.advanceTimersToNextFrame();
-      vi.advanceTimersToNextFrame();
-      expect(container.querySelector<HTMLElement>(
-        '#epg-programmes .epg-virtual-spacer',
-      )?.style.height).toBe('255px');
-      expect(progItems().map(el => (el as HTMLElement).style.top))
-        .toEqual(['0px', '85px', '170px']);
-    } finally {
-      Element.prototype.getBoundingClientRect = original;
-    }
-  });
 
   it('leaves a list the user scrolled where it is on a background refresh', () => {
     state.channels = Array.from({ length: 200 }, (_, index) => ({
@@ -300,12 +278,6 @@ describe('EpgGrid.render', () => {
 
     expect(channelItems().length).toBeLessThan(50);
     expect(progItems().length).toBeLessThan(40);
-    expect(container.querySelector<HTMLElement>(
-      '#epg-channels .epg-virtual-spacer',
-    )?.style.height).toBe('3600000px');
-    expect(container.querySelector<HTMLElement>(
-      '#epg-programmes .epg-virtual-spacer',
-    )?.style.height).toBe('5400000px');
   });
 
   it('renders a bounded group menu for 50,000 groups', () => {

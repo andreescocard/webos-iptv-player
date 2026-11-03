@@ -57,6 +57,21 @@ describe('VirtualList', () => {
     expect(list.scrollOffset).toBe(0);
   });
 
+  it('reveals the right item after fixed rows grow and shrink', () => {
+    const list = createList();
+    list.setScrollOffset(600);
+    list.setItemSize(200);
+    expect(list.getItemOffset(6)).toBe(1200);
+    expect(list.ensureVisible(6)).toBe(true);
+    expect(list.scrollOffset).toBe(1100);
+
+    list.setItemSize(50);
+    expect(list.ensureVisible(6)).toBe(true);
+    expect(list.scrollOffset).toBe(300);
+    expect(list.getTotalSize(20)).toBe(1000);
+    expect(() => list.setItemSize(0)).toThrow(RangeError);
+  });
+
   it('rejects invalid sizing options', () => {
     expect(() => new VirtualList({
       itemSize: 0,

@@ -7,6 +7,7 @@ import type {
   ChannelHealthStatus,
   ChannelScope,
   NumberEvent,
+  Programme,
 } from '../types';
 import { SpatialNav, isFocusMove } from '../navigation/spatial-nav';
 import { KeyHandler } from '../navigation/key-handler';
@@ -32,8 +33,7 @@ import { VirtualList } from '../utils/virtual-list';
 import { VirtualScrollGuard } from '../utils/virtual-scroll';
 import { CONFIG } from '../config';
 
-// Row strides mirror the fixed row geometry in css/channel-list.css:
-// .channel-item is 88px, .group-item is 60px plus its 8px vertical margin.
+// Base strides mirror the row heights and spacing in css/channel-list.css.
 const CHANNEL_ROW_STRIDE = 88;
 const GROUP_ROW_STRIDE = 68;
 const CHANNEL_OVERSCAN = 12;
@@ -274,6 +274,9 @@ export class ChannelList {
   }
 
   render(ensureFocus = true): void {
+    const scale = Number(document.documentElement.dataset.textSize || '100') / 100;
+    this.channelVirtualizer.setItemSize(CHANNEL_ROW_STRIDE + 60 * (scale - 1));
+    this.groupVirtualizer.setItemSize(GROUP_ROW_STRIDE + 44 * (scale - 1));
     const tabs = PlaylistService.playlistTabs;
     // The selected playlist may have just been deleted in settings — fall back to All.
     if (this.currentPlaylist && !tabs.some(t => t.id === this.currentPlaylist)) this.currentPlaylist = '';
@@ -958,6 +961,15 @@ export class ChannelList {
     return row?.dataset.key ?? null;
   }
 
+  private renderNowPlaying(programme: Programme): Safe {
+    const progress = Math.min(100, Math.max(0,
+      (Date.now() - programme.start.getTime()) / (programme.stop.getTime() - programme.start.getTime()) * 100));
+    return html`
+      <div class="channel-now">${programme.title}</div>
+      <div class="channel-progress" aria-hidden="true"><span style="width:${progress}%"></span></div>
+    `;
+  }
+
   private renderChannel(ch: Channel, favs: string[], position: number, top: number): Safe {
     const globalIdx = PlaylistService.indexOf(ch);
     const epgId = EpgService.findChannelId(ch);
@@ -987,7 +999,7 @@ export class ChannelList {
           ${this.editor.isChannelEditing && ch.sourceName
             ? html`<div class="channel-now channel-source-name">${ch.sourceName}</div>`
             : (nowPlaying
-                ? html`<div class="channel-now">${nowPlaying.title}</div>`
+                ? this.renderNowPlaying(nowPlaying)
                 : '')}
         </div>
         ${this.editor.renderChannelEditStatus(ch)}
@@ -1018,7 +1030,7 @@ export class ChannelList {
             <div class="channel-name">${raw(channelLockBadge(item.channel))}${
               isFav ? raw(favoriteIcon(true)) : ''
             }${item.channel.name}</div>
-            ${nowPlaying ? html`<div class="channel-now">${nowPlaying.title}</div>` : ''}
+            ${nowPlaying ? this.renderNowPlaying(nowPlaying) : ''}
           </div>
           ${this.renderHealth(item.channel)}
           <div class="recent-kind-badge live">${t('common.live')}</div>

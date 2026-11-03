@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Movie suggestions keep full-width artwork while backdrop details load,
+  instead of briefly showing a side poster on each rotation.
+- Movie suggestions resume their ten-second rotation after a temporary
+  Continue Watching or catalog tile preview instead of stopping permanently.
+
+## 1.20.0 — 2026-11-02
+
+### Added
+
+- Related movies and a Related Series button in series details.
+
+### Changed
+
+- Movie suggestions rotate.
+
+### Fixed
+
+- Series details preserve focus and refresh the resume rail.
+
 ## 1.19.0 — 2026-11-02
 
 ### Changed

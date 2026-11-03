@@ -93,8 +93,6 @@ export const DE_MESSAGES = {
     one: '{count} Sendung',
     other: '{count} Sendungen',
   },
-  'epg.aired': 'Ausgestrahlt',
-  'epg.upcoming': 'Demnächst',
   'epg.reminder': 'Erinnerung',
   'epg.noData': 'Keine Programminformationen verfügbar.',
   'epg.watched': 'Angesehen',

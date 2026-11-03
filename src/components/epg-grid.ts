@@ -8,7 +8,7 @@ import type {
   ChannelScope,
   Programme,
 } from '../types';
-import { html, inShownView, raw } from '../utils/dom';
+import { html, inShownView, raw, type Safe } from '../utils/dom';
 import { morph } from '../utils/morph';
 import { channelKey, groupDisplayLabel, legacyChannelKey } from '../utils/channel';
 import { PlaylistService } from '../services/playlist-service';
@@ -56,10 +56,8 @@ type GroupOption = { id: ChannelGroupId; label: string; count: number };
 
 const CHANNEL_ROW_SIZE = 72;
 const GROUP_ROW_SIZE = 44;
-// Seed sizes only: rows are content-sized (a one-line description is shorter
-// than a two-line one), so the real heights are measured after each render.
-const PROGRAMME_ROW_ESTIMATE = 80;
-const PROGRAMME_WITH_DESCRIPTION_ESTIMATE = 108;
+// Titles can wrap, so seeded heights are replaced after each render.
+const PROGRAMME_ROW_ESTIMATE = 88;
 const VIRTUAL_OVERSCAN = 8;
 const EPG_VIEWPORT_FALLBACK = 900;
 
@@ -119,6 +117,7 @@ export class EpgGrid {
   private programmeSource: Programme[] | null = null;
   private programmeSizeKey = '';
   private programmeCount = 0;
+  private displayedProgrammes: Programme[] = [];
   private measuredProgrammes = new Set<number>();
   private programmeMeasureFrame: number | null = null;
   private programmeMeasureGeneration = 0;
@@ -479,6 +478,7 @@ export class EpgGrid {
     const todayMs = startOfDisplayDay(new Date()).getTime();
     const programmes = this.getCurrentProgrammes();
     this.programmeCount = programmes.length;
+    this.displayedProgrammes = programmes;
     const epgId = channel ? EpgService.findChannelId(channel) : null;
     const programmeSource = epgId ? EpgService.programmes[epgId] ?? null : null;
     if (programmeSource !== this.programmeSource) {
@@ -488,6 +488,7 @@ export class EpgGrid {
     const programmeSizeKey = [
       this.selectedChannelIdx,
       this.selectedDay,
+      document.documentElement.dataset.textSize || '100',
       programmes.length,
       programmes[0]?.start.getTime() ?? '',
       programmes[programmes.length - 1]?.start.getTime() ?? '',
@@ -495,10 +496,7 @@ export class EpgGrid {
     if (programmeSizeKey !== this.programmeSizeKey) {
       this.programmeSizeKey = programmeSizeKey;
       this.measuredProgrammes.clear();
-      this.programmeVirtualizer.setItemSizes(programmes.map(programme =>
-        programme.description
-          ? PROGRAMME_WITH_DESCRIPTION_ESTIMATE
-          : PROGRAMME_ROW_ESTIMATE));
+      this.programmeVirtualizer.setItemSizes(programmes.map(() => PROGRAMME_ROW_ESTIMATE));
     }
     this.loadArchiveAvailability(channel);
     const previousChannelList = this.container.querySelector<HTMLElement>('.epg-channel-list');
@@ -643,10 +641,9 @@ export class EpgGrid {
                 ${dateOptions.map((d, i) => {
                   const sel = i === this.selectedDay;
                   const isToday = d.getTime() === todayMs;
-                  const dayState = d.getTime() < todayMs ? 'day-past' : d.getTime() > todayMs ? 'day-future' : '';
                   const lbl = formatDayLabel(d);
                   return html`
-                    <div class="epg-date-item ${sel ? 'selected' : ''} ${isToday ? 'today' : ''} ${dayState}"
+                    <div class="epg-date-item ${sel ? 'selected' : ''} ${isToday ? 'today' : ''}"
                          data-key="${displayDayKey(d)}"
                          data-day-index="${i}" data-hover-target>
                       <span class="epg-date-weekday">${lbl.weekday}</span>
@@ -656,12 +653,6 @@ export class EpgGrid {
                 })}
               </div>
               <div class="epg-legend">
-                <span class="epg-legend-item state-past">
-                  <i class="epg-legend-dot"></i><span>${t('epg.aired')}</span>
-                </span>
-                <span class="epg-legend-item state-future">
-                  <i class="epg-legend-dot"></i><span>${t('epg.upcoming')}</span>
-                </span>
                 <button type="button"
                         class="epg-legend-item epg-reminder-entry"
                         data-epg-reminders aria-label="${t('reminderManager.title')}">
@@ -690,7 +681,7 @@ export class EpgGrid {
                     const progress = catchupAvailable && hasCatchup ? progressMap!.get(startMs) : undefined;
                     return html`
                       <div class="epg-programme-item
-                                  state-${state} ${current ? 'current' : ''}"
+                                  state-${state} ${current ? 'current' : ''} ${i === this.focusProg ? 'selected' : ''}"
                            data-key="${String(p.start.getTime())}"
                            data-prog-idx="${i}" data-hover-target
                            style="top:${this.programmeVirtualizer.getItemOffset(i)}px">
@@ -708,7 +699,6 @@ export class EpgGrid {
                             ${progress ? html`<span class="epg-catchup-badge ${progress.completed ? 'watched' : 'resume'}">${t(progress.completed ? 'epg.watched' : 'common.resume')}</span>` : ''}
                           </div>
                           ${progress && !progress.completed && progress.duration > 0 ? html`<div class="epg-catchup-progress"><div class="epg-catchup-progress-fill" style="width: ${Math.min(100, Math.max(0, Math.round(progress.position / progress.duration * 100)))}%"></div></div>` : ''}
-                          ${p.description ? html`<div class="epg-prog-desc">${p.description.slice(0, 200)}</div>` : ''}
                         </div>
                       </div>
                     `;
@@ -716,6 +706,9 @@ export class EpgGrid {
                   </div>
                 `
               }
+            </div>
+            <div class="epg-programme-detail ${programmes.length ? '' : 'hidden'}" data-key="epg-detail">
+              ${this.programmeDetail(programmes[this.focusProg])}
             </div>
           </div>
         </div>
@@ -766,9 +759,7 @@ export class EpgGrid {
     });
   }
 
-  /** Programme rows are content-sized — a one-line description is shorter than a
-   *  two-line one — so the seeded estimates are replaced by real heights once a
-   *  row has been painted. Returns true when a size changed. */
+  /** Rows are measured after painting because long titles can wrap. */
   private measureProgrammeRows(): boolean {
     const updates: Array<{ index: number; size: number }> = [];
     this.container.querySelectorAll<HTMLElement>('.epg-programme-item').forEach((row) => {
@@ -987,12 +978,24 @@ export class EpgGrid {
       });
     }, true);
   }
+  private programmeDetail(programme: Programme | undefined): Safe {
+    return programme ? html`
+      <div class="epg-detail-title">${programme.title}</div>
+      ${programme.description ? html`<div class="epg-prog-desc">${programme.description}</div>` : ''}
+    ` : html``;
+  }
 
-  // Hover and the D-pad move within the column without a render: only the
-  // pane highlight and the ring change. The scope paints the ring, and its
-  // reveal renders a row outside the virtual window.
+
+  // Selection reveals one description; the scope still owns the ring.
   private lightProgramme(idx: number): void {
+    const previous = this.focusProg;
     this.focusProg = idx;
+    if (previous !== idx) {
+      this.resolveGridKey(`prog:${String(previous)}`)?.classList.remove('selected');
+      this.resolveGridKey(`prog:${String(idx)}`)?.classList.add('selected');
+      const detail = this.container.querySelector<HTMLElement>('.epg-programme-detail');
+      if (detail) morph(detail, this.programmeDetail(this.displayedProgrammes[idx]));
+    }
     if (this.focusCol === 'programmes') return;
     this.focusCol = 'programmes';
     this.container.querySelectorAll('.pane-focused').forEach(el => el.classList.remove('pane-focused'));

@@ -1,4 +1,6 @@
 .channel-view {
+  --channel-sidebar-width: 288px;
+
   position: relative;
   display: flex;
   height: 100%;
@@ -6,7 +8,7 @@
 }
 
 .sidebar {
-  width: 380px;
+  width: var(--channel-sidebar-width);
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   display: flex;
@@ -103,13 +105,12 @@
   position: relative;
 }
 
-/* Fixed height: the group list is virtualized, so GROUP_ROW_STRIDE in
-   channel-list.ts must stay this height plus the 8px vertical margin. */
+/* The scaled height plus 8px spacing mirrors the group stride in channel-list.ts. */
 .group-item {
   position: absolute;
   left: 0;
   right: 0;
-  height: 60px;
+  height: calc(16px + 44px * var(--font-scale));
   display: flex;
   align-items: center;
   padding: 14px 16px;
@@ -123,7 +124,6 @@
 
 .group-item.active {
   background: var(--bg-tertiary);
-  border-color: var(--accent-dim);
 }
 
 .group-icon {
@@ -145,7 +145,7 @@
 
 .group-name {
   flex: 1;
-  font-size: 24px;
+  font-size: 22px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -154,7 +154,7 @@
 .group-count {
   font-size: 18px;
   color: var(--text-muted);
-  min-width: 40px;
+  min-width: 28px;
   text-align: right;
 }
 
@@ -228,9 +228,7 @@
   width: 100%;
 }
 
-/* Fixed height: the channel list is virtualized, so CHANNEL_ROW_STRIDE in
-   channel-list.ts must stay this height plus the 4px row gap. The two text
-   lines only just fit, so check this box before growing either font. */
+/* The scaled height plus 4px spacing mirrors the channel stride in channel-list.ts. */
 .channel-item {
   position: absolute;
   left: 0;
@@ -238,22 +236,22 @@
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: 8px 16px;
   border-radius: var(--radius);
   border: 2px solid transparent;
   cursor: pointer;
   transition: var(--transition);
   gap: 16px;
-  height: 84px;
+  height: calc(24px + 60px * var(--font-scale));
 }
 
 .channel-item.playing {
   background: rgb(var(--accent-rgb) / 0.08);
-  border-color: var(--accent-dim);
+  border-color: transparent;
 }
 
 .channel-item.recent-catchup {
-  height: 96px;
+  height: calc(36px + 60px * var(--font-scale));
 }
 
 .channel-number {
@@ -327,6 +325,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.channel-progress {
+  height: 2px;
+  margin-top: 4px;
+  background: var(--border);
+}
+
+.channel-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
 }
 
 .recent-kind-badge {
@@ -461,7 +471,7 @@
   position: absolute;
   right: 0;
   bottom: 0;
-  left: 380px;
+  left: var(--channel-sidebar-width);
   z-index: 10;
   display: flex;
   align-items: center;
@@ -483,7 +493,7 @@
 }
 
 .preview-list-hints {
-  height: 62px;
+  height: 64px;
 }
 
 .preview-list-context {
