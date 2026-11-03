@@ -162,6 +162,10 @@ build constant; `scripts/sync-version.mjs` runs on `npm version`.
   by `KeyHandler`.
 - **Parsers** (`src/parsers/`) — `parseM3U` / `parseXMLTV` are pure
   functions; keep them tolerant of messy real-world feeds.
+- **i18n** (`src/i18n/`) — `t`/`tp` read the active catalog. English is
+  bundled; every other catalog builds to `js/locales/<locale>.js` and
+  `applyLocale()` loads it before switching, falling back to English.
+  Tests register all catalogs in `src/test/setup.ts`.
 - **Config** (`src/config.ts`) — `CONFIG` holds key codes, refresh
   intervals, and player/EPG/storage constants. Prefer it over magic numbers.
 - **Bundled service** (`bundled-service/`) — Node.js 0.12.2 CommonJS service

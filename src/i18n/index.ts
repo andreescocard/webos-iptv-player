@@ -7,23 +7,13 @@ import {
   type PluralMessageKey,
   type TextMessageKey,
 } from './en';
-import { DE_MESSAGES } from './de';
-import { ES_MESSAGES } from './es';
-import { FR_MESSAGES } from './fr';
-import { IT_MESSAGES } from './it';
-import { PL_MESSAGES } from './pl';
-import { PT_BR_MESSAGES } from './pt-BR';
 import { pseudoLocalize } from './pseudo';
-import { RU_MESSAGES } from './ru';
-import { TR_MESSAGES } from './tr';
-import { UK_MESSAGES } from './uk';
-import { ZH_CN_MESSAGES } from './zh-CN';
+import { createLogger } from '../utils/logger';
 
 export type { MessageKey, PluralMessageKey, TextMessageKey } from './en';
 type Messages = Readonly<MessageCatalog>;
 type Params = Record<string, string | number>;
 type LocaleDefinition = {
-  messages: Messages;
   displayName: string;
   systemExact: readonly string[];
   systemPrefixes: readonly string[];
@@ -31,67 +21,56 @@ type LocaleDefinition = {
 
 const LOCALES = {
   en: {
-    messages: EN_MESSAGES,
     displayName: 'English',
     systemExact: [],
     systemPrefixes: [],
   },
   de: {
-    messages: DE_MESSAGES,
     displayName: 'Deutsch',
     systemExact: [],
     systemPrefixes: ['de'],
   },
   es: {
-    messages: ES_MESSAGES,
     displayName: 'Español',
     systemExact: [],
     systemPrefixes: ['es'],
   },
   fr: {
-    messages: FR_MESSAGES,
     displayName: 'Français',
     systemExact: [],
     systemPrefixes: ['fr'],
   },
   it: {
-    messages: IT_MESSAGES,
     displayName: 'Italiano',
     systemExact: [],
     systemPrefixes: ['it'],
   },
   pl: {
-    messages: PL_MESSAGES,
     displayName: 'Polski',
     systemExact: [],
     systemPrefixes: ['pl'],
   },
   'pt-BR': {
-    messages: PT_BR_MESSAGES,
     displayName: 'Português (Brasil)',
     systemExact: [],
     systemPrefixes: ['pt'],
   },
   ru: {
-    messages: RU_MESSAGES,
     displayName: 'Русский',
     systemExact: [],
     systemPrefixes: ['ru'],
   },
   tr: {
-    messages: TR_MESSAGES,
     displayName: 'Türkçe',
     systemExact: [],
     systemPrefixes: ['tr'],
   },
   uk: {
-    messages: UK_MESSAGES,
     displayName: 'Українська',
     systemExact: [],
     systemPrefixes: ['uk'],
   },
   'zh-CN': {
-    messages: ZH_CN_MESSAGES,
     displayName: '简体中文',
     systemExact: ['zh'],
     systemPrefixes: ['zh-cn', 'zh-sg', 'zh-hans'],
@@ -112,7 +91,52 @@ export function localeOptions(): { value: SupportedLocale; label: string }[] {
     .map(value => ({ value, label: LOCALES[value].displayName }));
 }
 
+const log = createLogger('I18n');
+
 let currentLocale: SupportedLocale = DEFAULT_LOCALE;
+
+// English ships in the app bundle; every other catalog is its own script
+// (js/locales/<locale>.js) so the TV parses only the language in use.
+const catalogs: Partial<Record<SupportedLocale, Messages>> = { en: EN_MESSAGES };
+const pending: Partial<Record<SupportedLocale, Promise<boolean>>> = {};
+
+type LocaleGlobal = { __iptvLocales?: Partial<Record<SupportedLocale, Messages>> };
+
+export function registerLocaleMessages(locale: SupportedLocale, messages: Messages): void {
+  catalogs[locale] = messages;
+}
+
+export function isLocaleLoaded(locale: SupportedLocale): boolean {
+  return catalogs[locale] !== undefined;
+}
+
+export function loadLocale(locale: SupportedLocale): Promise<boolean> {
+  if (catalogs[locale]) return Promise.resolve(true);
+  const inFlight = pending[locale];
+  if (inFlight) return inFlight;
+  const request = new Promise<boolean>(resolve => {
+    const script = document.createElement('script');
+    script.charset = 'utf-8';
+    script.src = `js/locales/${locale}.js`;
+    script.onload = () => {
+      const messages = (window as unknown as LocaleGlobal).__iptvLocales?.[locale];
+      if (messages) catalogs[locale] = messages;
+      resolve(messages !== undefined);
+    };
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  }).then(loaded => {
+    delete pending[locale];
+    if (!loaded) log.warn('Locale catalog failed to load', 'event=i18n.load.failed', `locale=${locale}`);
+    return loaded;
+  });
+  pending[locale] = request;
+  return request;
+}
+
+function messagesFor(locale: SupportedLocale): Messages {
+  return catalogs[locale] ?? EN_MESSAGES;
+}
 
 function pseudoLocaleRequested(): boolean {
   return typeof location !== 'undefined' && /(?:^|[?&])pseudo=1(?:&|$)/.test(location.search);
@@ -143,8 +167,15 @@ export function setLocale(locale: SupportedLocale): void {
   }
 }
 
-export function initLocale(preference: LocalePreference): void {
-  setLocale(resolveLocale(preference));
+// Loads the catalog first; falls back to English when it cannot load.
+export async function applyLocale(locale: SupportedLocale): Promise<SupportedLocale> {
+  const applied = await loadLocale(locale) ? locale : DEFAULT_LOCALE;
+  setLocale(applied);
+  return applied;
+}
+
+export function initLocale(preference: LocalePreference): Promise<SupportedLocale> {
+  return applyLocale(resolveLocale(preference));
 }
 
 export function getLocale(): SupportedLocale {
@@ -162,7 +193,7 @@ export function formatNumber(
 }
 
 export function t(key: TextMessageKey, params?: Params): string {
-  let message = LOCALES[currentLocale].messages[key] as string;
+  let message = messagesFor(currentLocale)[key] as string;
   if (__ENABLE_PSEUDO_LOCALE__ && pseudoLocaleRequested()) {
     message = pseudoLocalize(EN_MESSAGES[key]);
   }
@@ -172,8 +203,8 @@ export function t(key: TextMessageKey, params?: Params): string {
 
 export function tp(key: PluralMessageKey, count: number, params?: Params): string {
   const pseudo = __ENABLE_PSEUDO_LOCALE__ && pseudoLocaleRequested();
-  const locale = pseudo ? DEFAULT_LOCALE : currentLocale;
-  const forms = LOCALES[locale].messages[key] as PluralMessage;
+  const locale = pseudo || !isLocaleLoaded(currentLocale) ? DEFAULT_LOCALE : currentLocale;
+  const forms = messagesFor(locale)[key] as PluralMessage;
   const category = new Intl.PluralRules(locale).select(count);
   const message = forms[category] ?? forms.other;
   return interpolate(pseudo ? pseudoLocalize(message) : message, { ...params, count });
@@ -192,12 +223,13 @@ function placeholders(message: string): string[] {
   return names.sort();
 }
 
-export function validateTranslations(): string[] {
+export function validateTranslations(
+  all: Partial<Record<SupportedLocale, Messages>> = catalogs,
+): string[] {
   const errors: string[] = [];
   const keys = Object.keys(EN_MESSAGES) as MessageKey[];
-  for (const locale of Object.keys(LOCALES) as SupportedLocale[]) {
-    const definition: LocaleDefinition = LOCALES[locale];
-    const messages = definition.messages;
+  for (const locale of Object.keys(all) as SupportedLocale[]) {
+    const messages = all[locale]!;
     for (const key of keys) {
       const source = EN_MESSAGES[key];
       const value = messages[key];

@@ -11,6 +11,7 @@ import {
   tp,
   validateTranslations,
 } from './index';
+import { ALL_CATALOGS } from './catalogs';
 
 describe('i18n', () => {
   it('returns and interpolates English messages', () => {
@@ -274,7 +275,7 @@ describe('i18n', () => {
   });
 
   it('has no empty translations or mismatched placeholders', () => {
-    expect(validateTranslations()).toEqual([]);
+    expect(validateTranslations(ALL_CATALOGS)).toEqual([]);
   });
 
   it('localizes live preview settings and remaining minutes in every locale', () => {

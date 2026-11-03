@@ -61,7 +61,7 @@ import type {
   EpgSource,
   PlaylistEntry,
 } from './types';
-import { getLocale, initLocale, resolveLocale, setLocale, t, tp } from './i18n';
+import { applyLocale, getLocale, initLocale, resolveLocale, t, tp } from './i18n';
 
 const log = createLogger('App');
 
@@ -120,7 +120,7 @@ class App {
       this.parentalPinPrompt.showChallenge(request));
     StorageService.setWriteFailureHandler(() => showToast(t('app.saveFailed')));
     this.searchPrewarm.watchSourceWrites();
-    initLocale(StorageService.getLocalePreference());
+    await initLocale(StorageService.getLocalePreference());
     applyAnimationMode(StorageService.getAnimationMode());
     const initialLoadingText = $('#loading-text');
     if (initialLoadingText) initialLoadingText.textContent = t('common.loading');
@@ -1868,8 +1868,8 @@ class App {
     }
     if (action !== 'cancel') {
       const locale = resolveLocale(StorageService.getLocalePreference());
-      if (locale !== getLocale()) {
-        setLocale(locale);
+      const previous = getLocale();
+      if (locale !== previous && await applyLocale(locale) !== previous) {
         this.tabBar.refresh();
         ReminderService.reschedulePending();
       }

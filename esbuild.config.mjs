@@ -1,11 +1,12 @@
 import * as esbuild from 'esbuild';
-import { cpSync, readFileSync, writeFileSync, readdirSync, rmSync, mkdirSync } from 'fs';
+import { cpSync, readFileSync, writeFileSync, readdirSync, rmSync, mkdirSync, statSync } from 'fs';
 import {
   LEGACY_JS_BANNER,
   scanBundle,
   formatViolations,
 } from './scripts/compat-gate.mjs';
 import { validateShakaBundle } from './scripts/shaka-compat-gate.mjs';
+import { checkBundleBudgets } from './scripts/bundle-budget.mjs';
 import {
   convertLegacyColorSyntax,
   generateFlexGapFallback,
@@ -75,6 +76,10 @@ const define = {
 // syntax (`?.`, `??`, etc.) which would otherwise fail to parse on
 // older TVs and leave the app stuck on the loading screen.
 const TARGET = ['chrome53'];
+// Emit non-ASCII text as UTF-8 instead of \uXXXX escapes, which tripled
+// the size of Cyrillic catalogs. index.html and the locale loader both
+// declare UTF-8, so the TV decodes the scripts the same way.
+const CHARSET = 'utf8';
 
 // Shared config for the main app bundle (src/app.ts). The shipped build and
 // compat-gate scan use the same tree-shaken graph.
@@ -86,6 +91,7 @@ const appBuild = {
   target: TARGET,
   banner: { js: LEGACY_JS_BANNER },
   external: ['hls.js', 'mpegts.js', 'shaka-player'],
+  charset: CHARSET,
   define,
 };
 const workerBuild = {
@@ -97,9 +103,37 @@ const workerBuild = {
   banner: { js: LEGACY_JS_BANNER },
   define,
 };
+// One script per non-English catalog, loaded on demand by src/i18n.
+const LOCALE_FILE = /^([a-z]{2}(?:-[A-Z]{2})?)\.ts$/;
+const localeBuilds = readdirSync('src/i18n')
+  .map((file) => LOCALE_FILE.exec(file)?.[1])
+  .filter((locale) => locale && locale !== 'en')
+  .map((locale) => {
+    const exportName = `${locale.toUpperCase().replace('-', '_')}_MESSAGES`;
+    return {
+      name: `locale ${locale}`,
+      config: {
+        stdin: {
+          contents: `import { ${exportName} } from './${locale}';\n`
+            + 'var w = window;\n'
+            + 'w.__iptvLocales = w.__iptvLocales || {};\n'
+            + `w.__iptvLocales[${JSON.stringify(locale)}] = ${exportName};\n`,
+          resolveDir: 'src/i18n',
+          loader: 'ts',
+        },
+        bundle: true,
+        outfile: `dist/js/locales/${locale}.js`,
+        format: 'iife',
+        target: TARGET,
+        charset: CHARSET,
+      },
+    };
+  });
+rmSync('dist/js/locales', { recursive: true, force: true });
 const shippedBuilds = [
   { name: 'app', config: appBuild },
   { name: 'worker', config: workerBuild },
+  ...localeBuilds,
 ];
 
 // Shipped bundles (minified, both go into the IPK).
@@ -121,7 +155,16 @@ for (const { name, config } of shippedBuilds) {
     throw new Error(`${name} bundle:\n${formatViolations(violations)}`);
   }
 }
-console.log('Compat gate: app, worker and Shaka bundles are Chromium-53 clean.');
+console.log('Compat gate: app, worker, locale and Shaka bundles are Chromium-53 clean.');
+
+const shippedFiles = shippedBuilds.map(({ config }) => {
+  const path = config.outfile.replace(/^dist\/js\//, '');
+  return { path, bytes: statSync(config.outfile).size };
+});
+const overBudget = checkBundleBudgets(shippedFiles);
+if (overBudget.length > 0) {
+  throw new Error(`Bundle size budget exceeded:\n${overBudget.join('\n')}`);
+}
 
 // Desktop-only HLS and MPEG-TS libraries. Shaka stays in its separate lazy
 // bundle on both desktop and webOS.

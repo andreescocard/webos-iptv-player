@@ -1,9 +1,25 @@
 # Changelog
 
-## Unreleased
+## 1.21.0 — 2026-11-03
+
+### Added
+
+- Movies and Series offer smart collections, and Discover in Movies
+  surfaces top-rated titles.
+- An Up next card offers the next episode during the last 60 seconds of
+  an episode, with Play now to skip the credits.
+
+### Changed
+
+- Program progress in the live channel list advances on its own and
+  rolls over to the next program.
+- A movie stopped within 10 minutes of its end (10% for short films)
+  counts as finished and leaves Continue Watching.
 
 ### Fixed
 
+- Smart lists and merged genre collections no longer repeat a title
+  that the provider lists under several ids.
 - Movie suggestions keep full-width artwork while backdrop details load,
   instead of briefly showing a side poster on each rotation.
 - Movie suggestions resume their ten-second rotation after a temporary
