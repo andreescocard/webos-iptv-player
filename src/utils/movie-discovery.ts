@@ -51,6 +51,38 @@ export function randomGoodMovie(items: VodItem[], previousId?: string): VodItem 
   return null;
 }
 
+// Up to `count` distinct good movies in random order; the previous stream
+// comes last, only when nothing else is left.
+export function randomGoodMovies(items: VodItem[], count: number, previousId?: string): VodItem[] {
+  const picks: VodItem[] = [];
+  let pool = items;
+  while (picks.length < count) {
+    const item = randomGoodMovie(pool, previousId);
+    if (!item) break;
+    picks.push(item);
+    pool = pool.filter((other) => other.streamId !== item.streamId);
+  }
+  return picks;
+}
+
+// Other titles from the movie's category: good-rated ones in random order
+// first, then the rest in catalog order.
+export function relatedMovies(movie: VodItem, items: VodItem[], limit: number): VodItem[] {
+  const seen = new Set<string>([movie.streamId]);
+  const pool = items.filter((item) => {
+    if (seen.has(item.streamId)) return false;
+    seen.add(item.streamId);
+    return true;
+  });
+  const picks = randomGoodMovies(pool, limit);
+  const picked = new Set(picks);
+  for (const item of pool) {
+    if (picks.length >= limit) break;
+    if (!picked.has(item)) picks.push(item);
+  }
+  return picks;
+}
+
 // Only explicit service labels: bare "prime", missing plus signs, and partial
 // words are not evidence of a service category. Longer labels precede aliases.
 const STREAMING_RULES: Array<{ name: string; pattern: RegExp }> = [

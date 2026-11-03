@@ -105,6 +105,7 @@ export const EN_MESSAGES = {
   'epg.reminderSet': 'Reminder set',
   'epg.catchupUnavailable': "This program isn't available for catch-up.",
   'catalog.continueWatching': 'Continue Watching',
+  'catalog.relatedMovies': 'Related Movies',
   'catalog.allCategories': 'All Categories',
   'catalog.seeAll': 'See all',
   'catalog.sortBy': 'Sort by',

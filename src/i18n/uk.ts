@@ -106,6 +106,7 @@ export const UK_MESSAGES = {
   'epg.reminderSet': 'Нагадування встановлено',
   'epg.catchupUnavailable': 'Ця програма недоступна в ТВ-архіві.',
   'catalog.continueWatching': 'Продовжити перегляд',
+  'catalog.relatedMovies': 'Схожі фільми',
   'catalog.allCategories': 'Усі категорії',
   'catalog.seeAll': 'Показати всі',
   'catalog.sortBy': 'Сортувати за',

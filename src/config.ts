@@ -110,6 +110,8 @@ export const CONFIG = {
     WATCHLIST_MAX_ITEMS: 200,            // per account and content type
     HERO_FOLLOW_DELAY_MS: 500,           // focus rests this long before the browse hero follows it
     HERO_META_CACHE_ITEMS: 50,           // hero plot/backdrop summaries kept in memory per section
+    HERO_CAROUSEL_ITEMS: 5,              // suggested movies the browse hero rotates through
+    HERO_CAROUSEL_INTERVAL_MS: 10 * 1000, // long enough to read a title and its three-line plot
   },
 
   // Catch-up (time-shift) resume and history store tuning.

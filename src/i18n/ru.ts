@@ -106,6 +106,7 @@ export const RU_MESSAGES = {
   'epg.reminderSet': 'Напоминание установлено',
   'epg.catchupUnavailable': 'Эта передача недоступна в архиве.',
   'catalog.continueWatching': 'Продолжить просмотр',
+  'catalog.relatedMovies': 'Похожие фильмы',
   'catalog.allCategories': 'Все категории',
   'catalog.seeAll': 'Показать все',
   'catalog.sortBy': 'Сортировать по',

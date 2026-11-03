@@ -102,6 +102,7 @@ export const IT_MESSAGES = {
   'epg.reminderSet': 'Promemoria impostato',
   'epg.catchupUnavailable': 'Questo programma non è disponibile in replay.',
   'catalog.continueWatching': 'Continua a guardare',
+  'catalog.relatedMovies': 'Film simili',
   'catalog.allCategories': 'Tutte le categorie',
   'catalog.seeAll': 'Mostra tutto',
   'catalog.sortBy': 'Ordina per',

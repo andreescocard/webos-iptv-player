@@ -214,6 +214,9 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   protected heroResume: ResumeEntry | null = null;
   private heroPendingResume: ResumeEntry | null = null;
   private heroTimer: ReturnType<typeof setTimeout> | null = null;
+  // Suggestions the hero rotates through until focus picks a title.
+  private heroCarousel: I[] = [];
+  private heroCarouselTimer: ReturnType<typeof setTimeout> | null = null;
   private heroController: AbortController | null = null;
   private heroFetchKey = '';
   private readonly heroMetaCache = new LruCache<string, HeroMeta>(CONFIG.XTREAM.HERO_META_CACHE_ITEMS);
@@ -311,6 +314,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   }
   protected handleExtraScroll(_target: HTMLElement): boolean { return false; }
   protected onRequestSessionReset(): void {}
+  // Back on a detail screen opened from another one; true when it went back there.
+  protected detailBack(): boolean { return false; }
   // The Continue Watching rail (or '' when there is nothing to resume).
   protected abstract continueRail(): Safe | '';
   // The Watchlist rail (or '' when it is empty).
@@ -332,6 +337,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   protected initialHero(): I | null {
     return this.heroFromResume() ?? this.railGroups[0]?.items[0] ?? this.heroFallback();
   }
+  // Titles the browse hero rotates through on open; none keeps initialHero().
+  protected heroCarouselItems(): I[] { return []; }
   protected categoryHero(): I | null { return null; }
   protected onGridOpened(): void {}
   protected gridItems(): I[] {
@@ -468,6 +475,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       this.leaveBrowse();
       // A hero still following focus catches up when browse shows again.
       this.cancelHeroTimer();
+      this.cancelCarousel();
     }
     this.mode = mode;
     (Object.keys(this.layers) as Mode[]).forEach((key) => {
@@ -488,9 +496,12 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
 
   // Detail entry for subclasses: remembers where browse focus was first.
   protected enterDetail(): void {
-    this.gridReturnKey = this.mode === 'grid' ? this.focusedKey() : null;
+    if (this.mode !== 'detail') this.gridReturnKey = this.mode === 'grid' ? this.focusedKey() : null;
     this.plotExpanded = false;
     this.showLayer('detail');
+    // A detail opened from another one starts at its top.
+    const page = this.layers.detail.querySelector<HTMLElement>('.catalog-view');
+    if (page) page.scrollTop = 0;
     // A new item's detail starts on its first button.
     this.focusScope.track(null);
   }
@@ -827,6 +838,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.heroResume = null;
     this.heroPendingResume = null;
     this.heroReturnKey = null;
+    this.heroCarousel = [];
     this.gridVirtualizer.setScrollOffset(0);
     this.resume = this.visibleResume(account.id);
     this.clearLayer('browse');
@@ -960,6 +972,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
 
   handleAction(action: Action): void {
     this.syncNav();
+    // A key holds the shown suggestion for another full interval.
+    if (this.heroCarouselTimer !== null) this.scheduleCarousel();
     if (isFocusMove(action) && this.ringHidden()) {
       this.request(this.focusScope.focusKey, 'key');
       return;
@@ -975,7 +989,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   private route(action: Action): void {
     if (this.moveExtraFocus(action)) return;
     if (this.moveHeroFocus(action)) return;
-    if (this.mode === 'browse' && (action === 'left' || action === 'right')
+    if ((this.mode === 'browse' || this.mode === 'detail') && (action === 'left' || action === 'right')
         && this.moveRailFocus(action)) return;
     if (this.mode === 'grid'
         && (action === 'up' || action === 'down' || action === 'left' || action === 'right')) {
@@ -1027,6 +1041,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
 
   private onBack(): void {
     if (this.mode === 'detail') {
+      if (this.detailBack()) return;
       this.clearDetail();
       if (this.deepLinkBack) {
         const back = this.deepLinkBack;
@@ -1176,6 +1191,10 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   // for every tile it passes, so the hero follows only once focus rests.
   private followHero(item: I, resume: ResumeEntry | null = null): void {
     this.cancelHeroTimer();
+    if (this.heroCarousel.length) {
+      this.stopCarousel();
+      this.renderHero();
+    }
     if (this.heroItem && this.itemId(this.heroItem) === this.itemId(item)
       && (this.heroResume?.itemId ?? '') === (resume?.itemId ?? '')) {
       this.heroPending = null;
@@ -1211,8 +1230,54 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
 
   private stopHero(): void {
     this.cancelHeroTimer();
+    this.cancelCarousel();
     this.heroController?.abort();
     this.heroController = null;
+  }
+
+  private scheduleCarousel(): void {
+    this.cancelCarousel();
+    if (this.heroCarousel.length < 2 || this.mode !== 'browse') return;
+    this.heroCarouselTimer = setTimeout(() => {
+      this.heroCarouselTimer = null;
+      this.advanceCarousel();
+    }, CONFIG.XTREAM.HERO_CAROUSEL_INTERVAL_MS);
+  }
+
+  private cancelCarousel(): void {
+    if (this.heroCarouselTimer === null) return;
+    clearTimeout(this.heroCarouselTimer);
+    this.heroCarouselTimer = null;
+  }
+
+  private stopCarousel(): void {
+    this.cancelCarousel();
+    this.heroCarousel = [];
+  }
+
+  private advanceCarousel(): void {
+    const index = this.heroItem ? this.heroCarousel.indexOf(this.heroItem) : -1;
+    if (this.mode !== 'browse' || index < 0) return;
+    // Playback, a trailer, or a hidden section holds the shown title.
+    if (this.container.closest('.hidden') || trailerOverlay.visible) {
+      this.scheduleCarousel();
+      return;
+    }
+    const item = this.heroCarousel[(index + 1) % this.heroCarousel.length];
+    this.heroItem = item;
+    this.heroResume = null;
+    this.renderHero();
+    this.fetchHeroMeta(item);
+    this.scheduleCarousel();
+  }
+
+  // Which suggestion the hero shows; not focusable, so it never takes a key.
+  private carouselDots(): Safe | '' {
+    const index = this.heroItem ? this.heroCarousel.indexOf(this.heroItem) : -1;
+    if (this.heroCarousel.length < 2 || index < 0) return '';
+    return html`<div class="catalog-hero-dots" data-key="hero-dots" aria-hidden="true">${
+      this.heroCarousel.map((_, i) => html`<span class="catalog-hero-dot ${i === index ? 'active' : ''}"
+        data-key="dot:${i}"></span>`)}</div>`;
   }
 
   private heroMetaKey(item: I): string {
@@ -1249,7 +1314,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     const body = this.layers.browse.querySelector<HTMLElement>('.catalog-hero-body');
     if (!art || !body) return;
     morph(art, this.heroArt());
-    morph(body, this.heroText(this.fillNote()));
+    morph(body, this.heroText(html`${this.carouselDots()}${this.fillNote()}`));
   }
 
   private renderCategoryHero(): void {
@@ -1329,6 +1394,16 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
         id: this.itemId(item),
       }),
     ));
+  }
+
+  // A category's titles, loaded once and kept for its grid.
+  protected async categoryItems(categoryId: string, signal: AbortSignal): Promise<I[]> {
+    const account = this.account;
+    const cached = this.itemsByCategory[categoryId];
+    if (cached || !account) return cached ?? [];
+    const items = await this.loadVisibleItems(account, categoryId, signal);
+    if (!signal.aborted && this.account?.id === account.id) this.itemsByCategory[categoryId] = items;
+    return items;
   }
 
   private visibleResume(accountId: string): ResumeEntry[] {
@@ -1507,7 +1582,10 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       this.heroPending = null;
       this.heroPendingResume = null;
     }
-    if (!this.heroItem) this.heroItem = this.initialHero();
+    if (!this.heroItem) {
+      this.heroCarousel = this.heroCarouselItems();
+      this.heroItem = this.heroCarousel[0] ?? this.initialHero();
+    }
     const continueRail = this.continueRail();
     const watchlistRail = this.watchlistRail();
     const fillNote = this.fillNote();
@@ -1523,7 +1601,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
             <div class="catalog-hero" data-key="hero">${this.heroArt()}</div>
             <div class="catalog-rails" data-key="rails" data-lazy-root>
               <div class="catalog-rails-spacer catalog-hero-body" data-key="hero-body"
-                   data-rail-key="hero">${this.heroText(fillNote)}</div>
+                   data-rail-key="hero">${this.heroText(html`${this.carouselDots()}${fillNote}`)}</div>
               <div class="catalog-rails-body" data-key="rails-body">
                 ${continueRail}
                 ${watchlistRail}
@@ -1553,6 +1631,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       </div>
     `);
     if (this.heroItem) this.fetchHeroMeta(this.heroItem);
+    if (this.heroCarouselTimer === null) this.scheduleCarousel();
     if (restoreFocus) {
       this.restoringBrowse = true;
       try { this.restoreBrowseFocus(); } finally { this.restoringBrowse = false; }

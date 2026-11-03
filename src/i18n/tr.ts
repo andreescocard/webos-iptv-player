@@ -100,6 +100,7 @@ export const TR_MESSAGES = {
   'epg.reminderSet': 'Hatırlatıcı ayarlandı',
   'epg.catchupUnavailable': 'Bu program Geri İzle ile izlenemiyor.',
   'catalog.continueWatching': 'İzlemeye Devam Et',
+  'catalog.relatedMovies': 'Benzer filmler',
   'catalog.allCategories': 'Tüm Kategoriler',
   'catalog.seeAll': 'Tümünü gör',
   'catalog.sortBy': 'Sıralama ölçütü',

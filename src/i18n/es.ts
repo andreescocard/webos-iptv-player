@@ -102,6 +102,7 @@ export const ES_MESSAGES = {
   'epg.reminderSet': 'Recordatorio configurado',
   'epg.catchupUnavailable': 'Este programa no está disponible en catch-up.',
   'catalog.continueWatching': 'Seguir viendo',
+  'catalog.relatedMovies': 'Películas similares',
   'catalog.allCategories': 'Todas las categorías',
   'catalog.seeAll': 'Ver todo',
   'catalog.sortBy': 'Ordenar por',

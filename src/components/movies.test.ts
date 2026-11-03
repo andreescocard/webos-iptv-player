@@ -229,6 +229,71 @@ describe('Movies browse + grid', () => {
     });
   });
 
+  describe('hero carousel', () => {
+    const rated = (id: string, name: string) => ({ ...vod(id, name), rating: '8' });
+    const title = () => container.querySelector('.catalog-hero-title')?.textContent;
+    const activeDot = () => Array.from(container.querySelectorAll('.catalog-hero-dot'))
+      .findIndex((dot) => dot.classList.contains('active'));
+    const movies = ['1', '2', '3', '4', '5', '6'].map((n) => rated(`2${n}`, `Pick ${n}`));
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      catalogMock.loadVodInfo.mockResolvedValue(null);
+    });
+    afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+    it('rotates five good-rated suggestions every ten seconds, then wraps', async () => {
+      await openWith([{ id: '1', name: 'Cat A' }], [vod('19', 'Unrated'), ...movies]);
+      expect(container.querySelectorAll('.catalog-hero-dot')).toHaveLength(5);
+      expect(title()).toBe('Pick 1');
+      expect(activeDot()).toBe(0);
+      vi.advanceTimersByTime(9999);
+      expect(title()).toBe('Pick 1');
+      vi.advanceTimersByTime(1);
+      expect(title()).toBe('Pick 2');
+      expect(activeDot()).toBe(1);
+      vi.advanceTimersByTime(40000);
+      expect(title()).toBe('Pick 1');
+    });
+
+    it('holds the shown suggestion for a full interval after a key', async () => {
+      const { view } = await openWith([{ id: '1', name: 'Cat A' }], movies);
+      container.querySelector('[data-hero-action="info"]')!
+        .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+      vi.advanceTimersByTime(9000);
+      view.handleAction('left');
+      vi.advanceTimersByTime(9000);
+      expect(title()).toBe('Pick 1');
+      vi.advanceTimersByTime(1000);
+      expect(title()).toBe('Pick 2');
+    });
+
+    it('stops once focus picks a title, and waits while the section is hidden', async () => {
+      await openWith([{ id: '1', name: 'Cat A' }], movies);
+      container.classList.add('hidden');
+      vi.advanceTimersByTime(30000);
+      expect(title()).toBe('Pick 1');
+      container.classList.remove('hidden');
+      vi.advanceTimersByTime(10000);
+      expect(title()).toBe('Pick 2');
+      container.querySelector(`.catalog-tile[data-item-id="26"]`)!
+        .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+      expect(container.querySelector('.catalog-hero-dots')).toBeNull();
+      vi.advanceTimersByTime(500);
+      expect(title()).toBe('Pick 6');
+      vi.advanceTimersByTime(60000);
+      expect(title()).toBe('Pick 6');
+    });
+
+    it('keeps a single suggestion still, without dots', async () => {
+      await openWith([{ id: '1', name: 'Cat A' }], [rated('21', 'Pick 1'), vod('22', 'Unrated')]);
+      expect(container.querySelector('.catalog-hero-dots')).toBeNull();
+      vi.advanceTimersByTime(60000);
+      expect(title()).toBe('Pick 1');
+    });
+  });
+
   it('shows a middle-dot where a category name has an exotic separator', async () => {
     catalogMock.loadVodInfo.mockResolvedValue(null);
     await openWith([{ id: '1', name: 'Anime ∤ Dublado' }, { id: '2', name: 'Drama' }], [vod('10', 'Movie One')]);
@@ -1321,6 +1386,72 @@ describe('Movies detail', () => {
     resolveInfo({ plot: 'x', cast: '', director: '', genre: '', releaseDate: '', durationSecs: 0, poster: '', imdbId: '', tmdbId: '', year: 0 });
     await Promise.resolve(); await Promise.resolve(); // info re-render
     expect(container.querySelector('.focused')?.getAttribute('data-key')).toBe('play');
+  });
+});
+
+describe('Movies related rail', () => {
+  const settle = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); };
+  const related = () => Array.from(container.querySelectorAll('[data-rail-key="related"] [data-related-item]'))
+    .map((el) => el.getAttribute('data-related-item'));
+  const openTile = async (view: { handleAction(action: Action): void }, id: string) => {
+    container.querySelector(`.catalog-tile[data-item-id="${id}"]`)!
+      .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+    view.handleAction('select');
+    await settle();
+  };
+
+  beforeEach(() => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    catalogMock.loadVodInfo.mockResolvedValue(null);
+  });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('lists other titles from the movie category, good-rated first', async () => {
+    const { view } = await openWith([{ id: '1', name: 'Cat A' }], [
+      vod('10', 'Movie One'), vod('11', 'Movie Two'), { ...vod('12', 'Movie Three'), rating: '9' },
+    ]);
+    await openTile(view, '10');
+    expect(container.querySelector('[data-rail-key="related"] .catalog-rail-title')?.textContent).toBe('Related Movies');
+    expect(related()).toEqual(['12', '11']);
+  });
+
+  it('loads a category the browse did not preload', async () => {
+    const { view } = await openWith([{ id: '1', name: 'Cat A' }], [vod('10', 'Movie One')]);
+    catalogMock.loadVodStreams.mockResolvedValue([vod('30', 'Other One', '9'), vod('31', 'Other Two', '9')]);
+    await (view as unknown as { openDetail(v: unknown): Promise<void> }).openDetail(vod('30', 'Other One', '9'));
+    await settle();
+    expect(catalogMock.loadVodStreams).toHaveBeenLastCalledWith(account, '9', expect.anything());
+    expect(related()).toEqual(['31']);
+  });
+
+  it('opens a related title, and Back returns to the movie it came from', async () => {
+    const { view } = await openWith([{ id: '1', name: 'Cat A' }], [vod('10', 'Movie One'), vod('11', 'Movie Two')]);
+    await openTile(view, '10');
+    const tile = container.querySelector<HTMLElement>('[data-related-item="11"]')!;
+    tile.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+    view.handleAction('select');
+    await settle();
+    expect(container.querySelector('.movies-detail .detail-title')?.textContent).toBe('Movie Two');
+    expect(related()).toEqual(['10']);
+    view.handleAction('back');
+    await settle();
+    expect(container.querySelector('.movies-detail .detail-title')?.textContent).toBe('Movie One');
+    view.handleAction('back');
+    expect(container.querySelector('.catalog-layer-detail')?.classList.contains('catalog-layer-hidden')).toBe(true);
+    expect(container.querySelector('.catalog-browse')).not.toBeNull();
+  });
+
+  it('walks the related rail with Left and Right', async () => {
+    const { view } = await openWith([{ id: '1', name: 'Cat A' }], [
+      vod('10', 'Movie One'), vod('11', 'Movie Two'), vod('12', 'Movie Three'),
+    ]);
+    await openTile(view, '10');
+    container.querySelector<HTMLElement>('[data-related-item="11"]')!
+      .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+    view.handleAction('right');
+    expect(view.focusScope.focusKey).toContain('r:12');
+    view.handleAction('right');
+    expect(view.focusScope.focusKey).toContain('r:12');
   });
 });
 

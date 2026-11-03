@@ -106,6 +106,7 @@ export const PL_MESSAGES = {
   'epg.reminderSet': 'Ustawiono przypomnienie',
   'epg.catchupUnavailable': 'Tego programu nie można odtworzyć wstecz.',
   'catalog.continueWatching': 'Oglądaj dalej',
+  'catalog.relatedMovies': 'Podobne filmy',
   'catalog.allCategories': 'Wszystkie kategorie',
   'catalog.seeAll': 'Zobacz wszystko',
   'catalog.sortBy': 'Sortuj według',
