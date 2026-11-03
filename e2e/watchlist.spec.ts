@@ -282,3 +282,31 @@ test('auto-plays the next episode and removes a series only after its final epis
   await expect(page.locator('#view-series')).toBeVisible();
   await expect.poll(() => storedWatchlist(page)).toEqual([]);
 });
+
+test('offers the next episode over the credits and OK skips to it', async ({ page }) => {
+  await seedWatchlistCatalog(page, [seriesEntry()]);
+  await routeLiveManifest(page);
+  await neuterVideo(page);
+  await page.goto('/');
+
+  await enterTab(page, 'series');
+  await focusAndSelect(page, '#view-series .catalog-tile[data-item-id="1"]');
+  await focusAndSelect(page, '#view-series .episode-row[data-episode-id="101"]');
+  await expect(page.locator('#player-osd .osd-channel-name')).toContainText('Episode One');
+
+  const card = page.locator('#player-up-next');
+  await expect(card).toBeHidden();
+  await page.locator('#video-player').evaluate((video) => {
+    Object.defineProperty(video, 'duration', { configurable: true, value: 1800 });
+    Object.defineProperty(video, 'currentTime', { configurable: true, writable: true, value: 1790 });
+    video.dispatchEvent(new Event('timeupdate'));
+  });
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('Episode Two');
+  await expect(card).toContainText('Starts in 10 seconds');
+
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#player-osd .osd-channel-name')).toContainText('Episode Two');
+  await expect(card).toBeHidden();
+  await expect(page.locator('#player-osd .osd-next-episode')).toHaveCount(0);
+});
