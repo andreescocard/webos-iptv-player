@@ -49,6 +49,8 @@ export interface PlayerOsdOptions {
   onPlayNext: () => void;
   onCancelNext: () => void;
   onVisibilityChange?: () => void;
+  // Keeps the OSD from timing out, such as while the pointer rests on a control beside it.
+  holdOpen?: () => boolean;
 }
 
 function audioTrackText(name: string): string {
@@ -138,7 +140,10 @@ export class PlayerOsd {
     this.timer = null;
     // Keep the OSD up while paused (live DVR or catch-up): nothing to fall behind.
     if (this.callbacks.getSnapshot().playback?.paused) return;
-    this.timer = setTimeout(() => this.hide(), StorageService.getPlayerOsdTimeoutMs());
+    this.timer = setTimeout(() => {
+      if (this.callbacks.holdOpen?.()) this.resetTimer();
+      else this.hide();
+    }, StorageService.getPlayerOsdTimeoutMs());
   }
 
   render(): void {

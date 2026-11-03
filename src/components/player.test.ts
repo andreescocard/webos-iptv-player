@@ -1864,6 +1864,52 @@ describe('Player up-next card over the credits', () => {
     expect(cardShown()).toBe(true);
   });
 
+  it('goes on to the next episode when the stream fails under the card', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const r = req();
+    player.playVod(r);
+    at(1790);
+
+    video.dispatchEvent(new Event('error'));
+
+    expect(probeMedia).toHaveBeenCalledWith(next.url, 'x1|media_probe|episode|e2');
+    expect(r.onBack).not.toHaveBeenCalled();
+    expect(warn.mock.calls.map(args => args.join(' '))).toEqual(
+      expect.arrayContaining([expect.stringContaining('event=playback.vod.error')]),
+    );
+    expect(warn.mock.calls.map(args => args.join(' ')).join('\n')).toContain('next=1');
+    warn.mockRestore();
+  });
+
+  it('keeps the OSD up while the pointer rests on the card', () => {
+    document.documentElement.classList.remove('keyboard-nav');
+    player.playVod(req());
+    at(1790);
+    card().getBoundingClientRect = () => ({
+      left: 1400, right: 1880, top: 700, bottom: 900, width: 480, height: 200, x: 1400, y: 700,
+      toJSON: () => ({}),
+    });
+    container.dispatchEvent(new MouseEvent('mousemove', { clientX: 1500, clientY: 800, bubbles: true }));
+    const osd = container.querySelector('#player-osd') as HTMLElement;
+    Object.defineProperty(video, 'paused', { configurable: true, value: false });
+    player.showOSD();
+
+    vi.advanceTimersByTime(30_000);
+    expect(osd.classList.contains('hidden')).toBe(false);
+
+    container.dispatchEvent(new MouseEvent('mousemove', { clientX: 300, clientY: 300, bubbles: true }));
+    vi.advanceTimersByTime(30_000);
+    expect(osd.classList.contains('hidden')).toBe(true);
+  });
+
+  it('leaves the focus owner alone on progress ticks outside the credits', () => {
+    player.playVod(req());
+    const owner = vi.spyOn(Focus, 'owner');
+    at(600);
+    expect(owner).not.toHaveBeenCalled();
+    owner.mockRestore();
+  });
+
   it('hides the card while a player menu owns the keys', () => {
     player.playVod(req());
     const menu = document.createElement('div');
