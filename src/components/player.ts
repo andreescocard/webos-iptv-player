@@ -47,6 +47,9 @@ import {
   type PlayerOsdStreamInfo,
 } from './player-osd';
 import { PlayerTracks } from './player-tracks';
+import { UpNextCard, type UpNextCardState } from './up-next-card';
+import { InputMode } from '../navigation/input-mode';
+import { Focus } from '../navigation/focus-scope';
 
 const log = createLogger('Player');
 
@@ -76,6 +79,9 @@ export class Player {
   private upNextSeconds = 0;
   private upNextTimer: ReturnType<typeof setInterval> | null = null;
   private upNextAuthorized = false;
+  private upNextCard: UpNextCard | null = null;
+  // Back closed the credits card; it stays closed until playback leaves the credits.
+  private upNextDismissed = false;
   private pendingResumeSecs = 0;
   private pendingSeekTarget: number | null = null;
   private wasPlayingBeforeHide = false;
@@ -179,7 +185,10 @@ export class Player {
       onResync: () => this.resyncAV(),
       onPlayNext: () => this.playNextItem(),
       onCancelNext: () => this.cancelNextItem(),
+      onVisibilityChange: () => this.updateUpNextCard(),
     });
+    const upNextEl = container.querySelector<HTMLElement>('#player-up-next');
+    if (upNextEl) this.upNextCard = new UpNextCard(upNextEl, () => this.playUpNextNow());
     this.stallWatchdog = new StallWatchdog({
       probe: (): StallProbe => {
         const v = this.videoEl;
@@ -747,6 +756,11 @@ export class Player {
       else if (action === 'back' || action === 'stop') this.cancelNextItem();
       return;
     }
+    if (this.upNextCard?.visible) {
+      // A pointer click lands on the card's own button; elsewhere it keeps its usual meaning.
+      if (action === 'select' && InputMode.current === 'keys') { this.playUpNextNow(); return; }
+      if (action === 'back') { this.upNextDismissed = true; this.updateUpNextCard(); return; }
+    }
     switch (action) {
       case 'back':
       case 'stop': {
@@ -821,24 +835,8 @@ export class Player {
   // to the channel's live stream instead.
   private onEnded(): void {
     if (this.vod) {
-      const v = this.vod;
-      this.vod = null; // before stop(), so it doesn't re-save a resume point for a finished movie
-      // An episode is marked watched, which also moves Continue Watching to the next one.
-      if (v.kind === 'episode') this.saveVodResume(v, true);
-      else StorageService.clearResume(v.accountId, v.kind, v.itemId);
-      if (v.kind === 'vod') {
-        StorageService.removeWatchlist(v.accountId, 'vod', v.itemId);
-      } else if ((v.episodeQueue?.length ?? 0) === 0 && v.watchlistOwner) {
-        StorageService.removeWatchlist(v.accountId, v.watchlistOwner.kind, v.watchlistOwner.itemId);
-      }
-      this.stop();
-      const queue = v.kind === 'episode' ? v.episodeQueue : v.watchlistQueue;
-      const next = queue?.[0];
-      if (next) {
-        this.startNextItem(next, queue?.slice(1) ?? [], v.kind === 'episode', v.onBack, v);
-        return;
-      }
-      v.onBack();
+      // The credits card already counted down to this moment.
+      this.finishVod(this.vod, !this.upNextCard?.visible);
       return;
     }
     if (this.catchupInfo && this.currentChannel) {
@@ -861,6 +859,8 @@ export class Player {
     this.wasPlayingBeforeHide = false;
     this.startPlaybackGeneration();
     this.clearUpNextTimer();
+    this.upNextDismissed = false;
+    this.upNextCard?.update(null, 0);
     if (this.vod) this.saveVodResume();
     this.saveCatchupProgress(); // save before the video element is torn down
     this.stallWatchdog.stop();
@@ -890,12 +890,63 @@ export class Player {
     this.onPlaybackStateChanged();
   }
 
+  private finishVod(v: VodPlayback, countdown: boolean): void {
+    this.vod = null; // before stop(), so it doesn't re-save a resume point for a finished movie
+    // An episode is marked watched, which also moves Continue Watching to the next one.
+    if (v.kind === 'episode') this.saveVodResume(v, true);
+    else StorageService.clearResume(v.accountId, v.kind, v.itemId);
+    if (v.kind === 'vod') {
+      StorageService.removeWatchlist(v.accountId, 'vod', v.itemId);
+    } else if ((v.episodeQueue?.length ?? 0) === 0 && v.watchlistOwner) {
+      StorageService.removeWatchlist(v.accountId, v.watchlistOwner.kind, v.watchlistOwner.itemId);
+    }
+    this.stop();
+    const queue = v.kind === 'episode' ? v.episodeQueue : v.watchlistQueue;
+    const next = queue?.[0];
+    if (next) {
+      this.startNextItem(next, queue?.slice(1) ?? [], v.kind === 'episode', v.onBack, v, countdown);
+      return;
+    }
+    v.onBack();
+  }
+
+  private playUpNextNow(): void {
+    if (this.vod && this.upNextCard?.visible) this.finishVod(this.vod, false);
+  }
+
+  private creditsUpNext(): UpNextCardState | null {
+    const v = this.vod;
+    const el = this.videoEl;
+    const next = v?.kind === 'episode' && !this.upNextTimer ? v.episodeQueue?.[0] : undefined;
+    if (!next || !el || !Number.isFinite(el.duration)) return null;
+    const lead = CONFIG.PLAYER.UP_NEXT_CREDITS;
+    // A clip too short to have credits would show the card for most of its length.
+    if (el.duration < lead * 4) return null;
+    const left = el.duration - (this.pendingSeekTarget ?? el.currentTime);
+    if (left > lead) return null;
+    return { title: next.title, seconds: Math.max(1, Math.ceil(left)) };
+  }
+
+  // Shown only while the player itself owns the keys: a menu or panel over it hides the card.
+  private updateUpNextCard(): void {
+    const card = this.upNextCard;
+    if (!card) return;
+    const credits = this.creditsUpNext();
+    if (!credits) this.upNextDismissed = false;
+    const covered = Focus.owner() !== Focus.base();
+    if (!credits || this.upNextDismissed || covered) { card.update(null, 0); return; }
+    const osd = this.container.querySelector<HTMLElement>('#player-osd');
+    const bottom = this.osd.isVisible() && osd ? osd.offsetHeight + 40 : 40;
+    card.update(credits, bottom);
+  }
+
   private startNextItem(
     next: VodQueueItem,
     remaining: VodQueueItem[],
     isEpisodeQueue: boolean,
     onBack: () => void,
     finished: VodQueueItem,
+    countdown = true,
   ): void {
     this.recreateVideoEl();
     // The PIN unlocked the whole series, so its next episode continues.
@@ -907,6 +958,7 @@ export class Player {
       watchlistQueue: isEpisodeQueue ? undefined : remaining,
       onBack,
     };
+    if (!countdown) { this.playQueuedItem(); return; }
     this.upNextSeconds = CONFIG.PLAYER.UP_NEXT_COUNTDOWN;
     this.osd.show();
     show(this.container);
@@ -925,8 +977,13 @@ export class Player {
   }
 
   private playNextItem(): void {
+    if (!this.vod || !this.upNextTimer) return;
+    this.playQueuedItem();
+  }
+
+  private playQueuedItem(): void {
     const next = this.vod;
-    if (!next || !this.upNextTimer) return;
+    if (!next) return;
     const authorized = this.upNextAuthorized;
     log.debug('Up next starting', 'event=parental.upnext', `kind=${next.kind}`,
       `sameItem=${String(authorized)}`);
@@ -1355,6 +1412,7 @@ export class Player {
       }
     }
     this.osd.refreshProgress();
+    this.updateUpNextCard();
   }
 
   hideOSD(): void {

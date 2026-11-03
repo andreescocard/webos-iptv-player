@@ -48,6 +48,7 @@ export interface PlayerOsdOptions {
   onResync: () => void;
   onPlayNext: () => void;
   onCancelNext: () => void;
+  onVisibilityChange?: () => void;
 }
 
 function audioTrackText(name: string): string {
@@ -116,6 +117,7 @@ export class PlayerOsd {
     const osd = $('#player-osd', this.container);
     if (osd) show(osd);
     this.resetTimer();
+    this.callbacks.onVisibilityChange?.();
   }
 
   hide(): void {
@@ -124,6 +126,7 @@ export class PlayerOsd {
     if (osd) hide(osd);
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    this.callbacks.onVisibilityChange?.();
   }
 
   toggle(): void {

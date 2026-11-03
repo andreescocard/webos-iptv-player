@@ -75,6 +75,7 @@ export const CONFIG = {
     SUBTITLE_OFFSET_MAX: 60,    // max |offset| the adjuster allows (seconds)
     SUBTITLE_SEARCH_TIMEOUT: 8000, // ms one online provider may take before the merged search gives up on it
     UP_NEXT_COUNTDOWN: 10,      // seconds before the queued episode/movie starts automatically
+    UP_NEXT_CREDITS: 60,        // seconds before an episode ends that its next one is offered over the credits
   },
 
   EPG: {

@@ -1727,6 +1727,159 @@ describe('Player VOD mode', () => {
   });
 });
 
+describe('Player up-next card over the credits', () => {
+  const next = {
+    url: 'http://host:8080/series/u/p/e2.mp4', title: 'Series One — S1E2',
+    poster: '', accountId: 'x1', itemId: 'e2', kind: 'episode' as const, subtitles: [],
+  };
+  const req = (over = {}) => ({
+    url: 'http://host:8080/series/u/p/e1.mp4', title: 'Series One — S1E1', poster: '',
+    accountId: 'x1', itemId: 'e1', kind: 'episode' as const, resumeSecs: 0, subtitles: [],
+    onBack: vi.fn(), episodeQueue: [next], ...over,
+  });
+
+  let player: Player;
+  let container: HTMLElement;
+  let video: HTMLVideoElement;
+  const card = () => container.querySelector('#player-up-next') as HTMLElement;
+  const osdText = () => container.querySelector('#player-osd')!.textContent;
+  const cardShown = () => !card().classList.contains('hidden');
+  const at = (time: number) => {
+    Object.defineProperty(video, 'currentTime', { value: time, configurable: true, writable: true });
+    video.dispatchEvent(new Event('timeupdate'));
+  };
+
+  beforeEach(() => {
+    HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
+    HTMLMediaElement.prototype.pause = vi.fn();
+    HTMLMediaElement.prototype.load = vi.fn();
+    document.body.innerHTML = '';
+    document.documentElement.classList.add('keyboard-nav');
+    container = document.createElement('div');
+    container.innerHTML = '<div id="player-osd"></div><div id="player-up-next" class="hidden"></div>';
+    document.body.appendChild(container);
+    player = new Player(container, () => {});
+    video = document.createElement('video');
+    Object.defineProperty(video, 'duration', { value: 1800, configurable: true });
+    container.appendChild(video);
+    player.init(video);
+    vi.mocked(probeMedia).mockClear();
+  });
+  afterEach(() => {
+    document.documentElement.classList.remove('keyboard-nav');
+    container.remove();
+  });
+
+  it('offers the next episode only in the last seconds of the current one', () => {
+    player.playVod(req());
+    at(1800 - CONFIG.PLAYER.UP_NEXT_CREDITS - 1);
+    expect(cardShown()).toBe(false);
+
+    at(1800 - 25);
+    expect(cardShown()).toBe(true);
+    expect(card().textContent).toContain('Series One — S1E2');
+    expect(card().textContent).toContain('Starts in 25 seconds');
+  });
+
+  it('shows no card without a next episode or for a movie', () => {
+    player.playVod(req({ episodeQueue: [] }));
+    at(1790);
+    expect(cardShown()).toBe(false);
+
+    player.playVod(req({ kind: 'vod', itemId: '10', episodeQueue: undefined, watchlistQueue: [next] }));
+    at(1790);
+    expect(cardShown()).toBe(false);
+  });
+
+  it('plays the next episode at once on OK and marks the current one watched', () => {
+    player.playVod(req());
+    at(1790);
+    vi.mocked(StorageService.setResume).mockClear();
+
+    player.handleAction('select');
+
+    expect(StorageService.setResume).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'e1', position: 1800 }));
+    expect(probeMedia).toHaveBeenCalledWith(next.url, 'x1|media_probe|episode|e2');
+    expect(osdText()).not.toContain('Starts in 10 seconds');
+    expect(cardShown()).toBe(false);
+  });
+
+  it('plays the next episode when its button is clicked', () => {
+    document.documentElement.classList.remove('keyboard-nav');
+    player.playVod(req());
+    at(1790);
+
+    (card().querySelector('[data-up-next-play]') as HTMLElement).click();
+
+    expect(probeMedia).toHaveBeenCalledWith(next.url, 'x1|media_probe|episode|e2');
+  });
+
+  it('keeps OK as play/pause for a pointer click outside the card', () => {
+    document.documentElement.classList.remove('keyboard-nav');
+    player.playVod(req());
+    at(1790);
+
+    player.handleAction('select');
+
+    expect(probeMedia).not.toHaveBeenCalledWith(next.url, expect.anything());
+    expect(cardShown()).toBe(true);
+  });
+
+  it('starts the next episode without a second countdown when the credits end under the card', () => {
+    player.playVod(req());
+    at(1799);
+
+    video.dispatchEvent(new Event('ended'));
+
+    expect(osdText()).not.toContain('Starts in 10 seconds');
+    expect(probeMedia).toHaveBeenCalledWith(next.url, 'x1|media_probe|episode|e2');
+  });
+
+  it('lets Back close the card so the credits keep playing, then counts down at the end', () => {
+    const r = req();
+    player.playVod(r);
+    at(1790);
+
+    player.handleAction('back');
+
+    expect(cardShown()).toBe(false);
+    expect(player.isVod()).toBe(true);
+    expect(r.onBack).not.toHaveBeenCalled();
+    at(1795);
+    expect(cardShown()).toBe(false);
+
+    video.dispatchEvent(new Event('ended'));
+    expect(osdText()).toContain('Starts in 10 seconds');
+    expect(probeMedia).not.toHaveBeenCalledWith(next.url, expect.anything());
+  });
+
+  it('offers the card again after a seek back out of the credits', () => {
+    player.playVod(req());
+    at(1790);
+    player.handleAction('back');
+
+    at(1600);
+    at(1790);
+
+    expect(cardShown()).toBe(true);
+  });
+
+  it('hides the card while a player menu owns the keys', () => {
+    player.playVod(req());
+    const menu = document.createElement('div');
+    container.appendChild(menu);
+    const scope = Focus.register({ id: 'test.menu', root: menu, onAction: () => {} });
+    Focus.push(scope);
+
+    at(1790);
+    expect(cardShown()).toBe(false);
+
+    Focus.pop(scope);
+    at(1791);
+    expect(cardShown()).toBe(true);
+  });
+});
+
 describe('containerMime', () => {
   it('maps reliably recognized progressive extensions to their MIME', () => {
     expect(containerMime('http://host/movie/u/p/10.mp4')).toBe('video/mp4');

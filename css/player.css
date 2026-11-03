@@ -63,6 +63,7 @@
 .player-menu,
 .subs-overlay,
 .subs-offset-card,
+.up-next-card,
 .number-entry,
 .live-preview-message {
   --text-primary: #e8e8e8;
@@ -84,6 +85,7 @@
 [data-overlay="frosted"] .player-menu,
 [data-overlay="frosted"] .subs-overlay,
 [data-overlay="frosted"] .subs-offset-card,
+[data-overlay="frosted"] .up-next-card,
 [data-overlay="frosted"] .number-entry,
 [data-overlay="frosted"] .live-preview-message {
   background: rgba(244, 246, 249, 0.85);
@@ -433,6 +435,42 @@
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
+}
+
+/* The next episode, offered in the corner of the closing credits, right-aligned
+   with the OSD. Below the OSD layer so a menu or sidebar always covers it; the
+   player moves it above the OSD while that is shown. */
+.up-next-card {
+  position: absolute;
+  right: 40px;
+  bottom: 40px;
+  width: calc(480px * var(--font-scale));
+  padding: 24px 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(30, 30, 50, 0.75);
+  backdrop-filter: blur(16px);
+  z-index: 55;
+}
+
+.up-next-title {
+  overflow: hidden;
+  font-size: 28px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.up-next-play {
+  margin-top: 16px;
+  padding: 10px 20px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 22px;
+  cursor: pointer;
 }
 
 /* Player sidebar overlay (Magic Remote / left key) */
