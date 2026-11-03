@@ -10,3 +10,6 @@ test-output/
 # Built JS service for the IPK
 build/
 .claude/*
+
+# Vitest cache
+.vitest/

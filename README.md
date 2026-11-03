@@ -11,7 +11,7 @@
   </p>
 </div>
 
-Current version: **1.19.0** — [Release notes](CHANGELOG.md).
+Current version: **1.21.0** — [Release notes](CHANGELOG.md).
 
 ## Screenshots
 
