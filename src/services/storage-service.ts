@@ -1144,7 +1144,9 @@ export const StorageService = {
     return entry ? cloneValue(entry) : null;
   },
   setResume(entry: ResumeEntry): void {
-    const pad = entry.kind === 'episode' ? CONFIG.XTREAM.EPISODE_FINISH_PAD : CONFIG.XTREAM.RESUME_FINISH_PAD;
+    const { EPISODE_FINISH_PAD, RESUME_FINISH_PAD, MOVIE_CREDITS_PAD, MOVIE_CREDITS_RATIO } = CONFIG.XTREAM;
+    const pad = entry.kind === 'episode' ? EPISODE_FINISH_PAD
+      : Math.max(RESUME_FINISH_PAD, Math.min(MOVIE_CREDITS_PAD, entry.duration * MOVIE_CREDITS_RATIO));
     const finished = entry.duration > 0 && entry.position >= entry.duration - pad;
     if (finished && entry.kind === 'episode') {
       // A finished episode stays on record as watched, and hands the Continue rail to the next one.

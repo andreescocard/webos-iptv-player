@@ -13,6 +13,7 @@ import { lazySrc } from '../utils/lazy-images';
 import { cleanEpisodeTitle, episodeLine, parseEpisodeName } from '../utils/episode-name';
 import { relatedTitles } from '../utils/movie-discovery';
 import { CONFIG } from '../config';
+import type { SmartKind } from '../utils/category-groups';
 
 const EPISODE_GAP = 16;
 const EPISODE_NO_PLOT_ESTIMATE = 138;
@@ -90,6 +91,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
   protected itemPoster(s: SeriesItem): string { return s.poster; }
   protected itemCategoryId(s: SeriesItem): string { return s.categoryId; }
   protected itemRating(s: SeriesItem): string { return s.rating; }
+  protected smartKinds(): SmartKind[] { return ['recent', 'new']; }
 
   protected async loadHeroMeta(
     account: PlaylistEntry,

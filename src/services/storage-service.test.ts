@@ -632,6 +632,17 @@ describe('StorageService resume store', () => {
     expect(StorageService.getResume('x1', 'vod', '10')).toBeNull();
   });
 
+  it('treats a movie stopped in its credits as finished, scaled for short ones', () => {
+    StorageService.setResume(resume({ position: 100 }));
+    StorageService.setResume(resume({ position: 7200 - 9 * 60, duration: 7200 }));
+    expect(StorageService.getResume('x1', 'vod', '10')).toBeNull();
+    StorageService.setResume(resume({ position: 7200 - 11 * 60, duration: 7200 }));
+    expect(StorageService.getResume('x1', 'vod', '10')?.position).toBe(7200 - 11 * 60);
+    // A 20-minute short keeps its resume point 3 minutes from the end.
+    StorageService.setResume(resume({ position: 1200 - 180, duration: 1200 }));
+    expect(StorageService.getResume('x1', 'vod', '10')?.position).toBe(1020);
+  });
+
   it('does not store a position below RESUME_MIN_SECS, and clears an existing one', () => {
     StorageService.setResume(resume({ position: 5 }));
     expect(StorageService.getResume('x1', 'vod', '10')).toBeNull();

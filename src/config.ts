@@ -107,6 +107,8 @@ export const CONFIG = {
     RAIL_ITEMS: 20,                      // posters shown per rail before the "all categories" drill-in
     RESUME_MIN_SECS: 15,                 // below this, treat as "start over" (don't store a resume point)
     RESUME_FINISH_PAD: 30,               // within this of the end = finished (clear the resume point)
+    MOVIE_CREDITS_PAD: 10 * 60,          // a movie stopped this close to the end is in its credits: finished
+    MOVIE_CREDITS_RATIO: 0.1,            // ...capped at this share of its length, so a short film needs more
     RESUME_CHECKPOINT_INTERVAL: 30 * 1000, // periodic VOD resume save, so a power-off or app kill loses little
     EPISODE_FINISH_PAD: 120,             // an episode this close to the end counts as watched; Continue Watching moves to the next
     ARCHIVE_TTL_MS: 10 * 60 * 1000,      // per-channel get_simple_data_table freshness

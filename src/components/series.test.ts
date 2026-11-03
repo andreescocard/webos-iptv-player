@@ -957,7 +957,7 @@ describe('Series related button', () => {
 });
 
 describe('Series collections', () => {
-  it('merges genre duplicates, groups streaming services, and builds Top rated', async () => {
+  it('merges genre duplicates, groups streaming services, and builds no Top rated list', async () => {
     const cats = [
       { id: '1', name: 'Drama' }, { id: '2', name: 'DRAMA 4K' }, { id: '3', name: 'Netflix | Series' },
       { id: '4', name: 'Crunchyroll' },
@@ -976,7 +976,8 @@ describe('Series collections', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     const titles = Array.from(container.querySelectorAll('.catalog-rail-track'))
       .map((track) => track.previousElementSibling?.textContent);
-    expect(titles).toEqual(['Top rated', 'Netflix', 'Crunchyroll', 'Drama']);
+    expect(titles).toEqual(['Netflix', 'Crunchyroll', 'Drama']);
+    expect(container.querySelector('[data-category-id="v:top"]')).toBeNull();
     const drama = container.querySelector('[data-rail-key="cat:g:drama"]')!;
     expect(Array.from(drama.querySelectorAll('.catalog-tile-name')).map((el) => el.textContent))
       .toEqual(['Alpha', 'Bravo']);

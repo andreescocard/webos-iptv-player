@@ -27,7 +27,7 @@ import {
   collectionIcon, genreLabelKey, planCategories, SMART_IDS,
   type CollectionKind, type GenreId, type SmartKind,
 } from '../utils/category-groups';
-import { newReleases, recentlyAdded, topRated, type SmartTitle } from '../utils/smart-collections';
+import { newReleases, recentlyAdded, topRated, uniqueTitles, type SmartTitle } from '../utils/smart-collections';
 import { StorageService } from '../services/storage-service';
 import {
   catalogParentalRequest,
@@ -206,7 +206,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
   protected collections: Collection<C>[] = [];
   // The account's whole list, once loaded; it feeds the smart lists and the tile counts.
   private allItems: I[] | null = null;
-  private allCounts: Map<string, number> | null = null;
+  private allByCategory: Map<string, I[]> | null = null;
+  private readonly collectionCounts = new Map<string, number>();
   protected railGroups: { category: C; items: I[] }[] = [];
   protected resume: ResumeEntry[] = [];
   protected itemsByCategory: Record<string, I[]> = {};
@@ -367,6 +368,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
   // Landscape artwork the Continue entry brings itself (an episode still), else ''.
   protected heroResumeArt(_item: I, _entry: ResumeEntry): string { return ''; }
   protected itemRating(_item: I): string { return ''; }
+  protected smartKinds(): SmartKind[] { return SMART_ORDER; }
   protected readonly preserveInitialHero: boolean = false;
   protected initialHero(): I | null {
     return this.heroFromResume() ?? this.railGroups[0]?.items[0] ?? this.heroFallback();
@@ -532,9 +534,14 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
   protected collectionCount(collection: Collection<C>): number | null {
     const cached = this.itemsByCategory[collection.category.id];
     if (collection.smart) return cached ? cached.length : null;
-    if (this.allCounts) {
-      const counts = this.allCounts;
-      return collection.sourceIds.reduce((sum, id) => sum + (counts.get(id) ?? 0), 0);
+    if (this.allByCategory) {
+      const id = collection.category.id;
+      let count = this.collectionCounts.get(id);
+      if (count === undefined) {
+        count = this.sourceItems(collection.sourceIds).length;
+        this.collectionCounts.set(id, count);
+      }
+      return count;
     }
     return cached ? cached.length : null;
   }
@@ -543,7 +550,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
   private organize(): void {
     const byId = new Map(this.categories.map((c) => [c.id, c] as [string, C]));
     const smart: Collection<C>[] = [];
-    SMART_ORDER.forEach((kind) => {
+    this.smartKinds().forEach((kind) => {
       const items = this.smartItems(kind);
       const id = SMART_IDS[kind];
       if (!items.length) {
@@ -609,18 +616,11 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
       this.categoryItems(id, signal).then((items): I[] | Error => items, (err: unknown) => err as Error)));
     const failure = settled.filter((r): r is Error => r instanceof Error)[0];
     if (failure && settled.every((r) => r instanceof Error)) throw failure;
-    const seen = new Set<string>();
     const merged: I[] = [];
     settled.forEach((result) => {
-      if (result instanceof Error) return;
-      result.forEach((item) => {
-        const id = this.itemId(item);
-        if (seen.has(id)) return;
-        seen.add(id);
-        merged.push(item);
-      });
+      if (!(result instanceof Error)) merged.push(...result);
     });
-    return merged;
+    return uniqueTitles(merged);
   }
 
   // Loads the whole catalog in the background; it unlocks the smart lists and counts.
@@ -643,24 +643,36 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
     if (signal.aborted || this.account?.id !== account.id) return;
     const visible = this.withoutConcealed(account, all, '');
     this.allItems = visible;
-    const counts = new Map<string, number>();
+    const byCategory = new Map<string, I[]>();
     visible.forEach((item) => {
       const id = this.itemCategoryId(item);
-      counts.set(id, (counts.get(id) ?? 0) + 1);
+      const list = byCategory.get(id);
+      if (list) list.push(item);
+      else byCategory.set(id, [item]);
     });
-    this.allCounts = counts;
+    this.allByCategory = byCategory;
+    this.collectionCounts.clear();
     this.organize();
     // The whole list builds every other rail without another request.
     this.railCollections(CONFIG.XTREAM.MAX_RAILS).forEach((c) => {
       const id = c.category.id;
       if (c.smart || this.itemsByCategory[id]) return;
-      const sources = new Set(c.sourceIds);
-      const items = visible.filter((item) => sources.has(this.itemCategoryId(item)));
+      const items = this.sourceItems(c.sourceIds);
       if (items.length) this.itemsByCategory[id] = items;
     });
     this.railGroups = this.buildRailGroups();
     if (!this.browseRendered) return;
     this.paintBrowse();
+  }
+
+  // The whole list's titles of these categories, in provider order, once each.
+  private sourceItems(sourceIds: string[]): I[] {
+    const byCategory = this.allByCategory;
+    if (!byCategory) return [];
+    const sources = new Set(sourceIds);
+    const visible = this.allItems ?? [];
+    if (sourceIds.length === 1) return uniqueTitles(byCategory.get(sourceIds[0]) ?? []);
+    return uniqueTitles(visible.filter((item) => sources.has(this.itemCategoryId(item))));
   }
 
   // The active mode's layer; hidden layers keep their DOM but never take focus.
@@ -1029,7 +1041,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
     this.categories = [];
     this.collections = [];
     this.allItems = null;
-    this.allCounts = null;
+    this.allByCategory = null;
+    this.collectionCounts.clear();
     this.categoryPrefix = null;
     this.railGroups = [];
     this.itemsByCategory = {};
@@ -1615,7 +1628,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
     categoryId: string,
     signal: AbortSignal,
   ): Promise<I[]> {
-    return this.withoutConcealed(account, await this.loadItems(account, categoryId, signal), categoryId);
+    return uniqueTitles(this.withoutConcealed(account, await this.loadItems(account, categoryId, signal), categoryId));
   }
 
   private withoutConcealed(account: PlaylistEntry, items: I[], categoryId: string): I[] {
