@@ -441,7 +441,7 @@ describe('ChannelList.render', () => {
 
       expect(channelItems().length).toBeLessThan(50);
       expect(container.querySelector<HTMLElement>('.channel-list-spacer')?.style.height)
-        .toBe('4400000px');
+        .toBe('4800000px');
     } finally {
       data.raw.splice(0, data.raw.length, ...original);
       playlistMock.applyCustomization();
@@ -508,7 +508,7 @@ describe('ChannelList.render', () => {
       list.render();
       expect(container.querySelectorAll('.group-item').length).toBeLessThan(60);
       expect(container.querySelector<HTMLElement>('.group-list-spacer')?.style.height)
-        .toBe('3400204px');
+        .toBe('3600216px');
     } finally {
       playlistMock.getGroupsForPlaylist = original;
       playlistMock.groupsRevision++;

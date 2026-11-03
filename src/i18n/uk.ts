@@ -114,6 +114,11 @@ export const UK_MESSAGES = {
   'catalog.sortZa': 'Z–A',
   'catalog.topRated': 'З високою оцінкою',
   'catalog.streaming': 'Стримінг',
+  'catalog.discover': 'Добірки',
+  'catalog.genres': 'Жанри',
+  'catalog.otherCategories': 'Інші категорії',
+  'catalog.newReleases': 'Новинки',
+  'catalog.recentlyAdded': 'Нещодавно додані',
   'catalog.movieCount': {
     one: '{count} фільм',
     few: '{count} фільми',

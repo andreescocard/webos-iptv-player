@@ -6,7 +6,7 @@ import type { Action, PlaylistEntry, WatchlistEntry, WatchlistKind } from '../ty
 const { catalogMock, storageMock, watchlistState, toastMock, trailerMock, preloadMock } = vi.hoisted(() => {
   const watchlistState = { entries: [] as WatchlistEntry[] };
   return {
-    catalogMock: { loadVodCategories: vi.fn(), loadVodStreams: vi.fn(), loadVodInfo: vi.fn(), getCatalogFill: vi.fn((): { done: number; total: number } | null => null), onCatalogFillChanged: vi.fn() },
+    catalogMock: { loadVodCategories: vi.fn(), loadAllVodStreams: vi.fn(), loadVodStreams: vi.fn(), loadVodInfo: vi.fn(), getCatalogFill: vi.fn((): { done: number; total: number } | null => null), onCatalogFillChanged: vi.fn() },
     watchlistState,
     storageMock: {
       getResumeList: vi.fn(() => [] as unknown[]),
@@ -71,6 +71,7 @@ beforeEach(() => {
   storageMock.getResumeList.mockReturnValue([]);
   storageMock.getResume.mockReturnValue(null);
   catalogMock.getCatalogFill.mockReturnValue(null);
+  catalogMock.loadAllVodStreams.mockResolvedValue([]);
   watchlistState.entries = [];
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -1598,6 +1599,7 @@ describe('Movies catalog fill indicator', () => {
     expect(note()?.textContent).toBe('Loading catalog… 13/35');
 
     catalogMock.getCatalogFill.mockReturnValue(null);
+  catalogMock.loadAllVodStreams.mockResolvedValue([]);
     fillChanged()('x1', 'vod_all');
     expect(note()).toBeNull();
     view.deactivate();
@@ -1616,9 +1618,143 @@ describe('Movies catalog fill indicator', () => {
     const { view } = await openWith([], []);
     expect(container.querySelector('.catalog-empty')?.textContent).toBe('Loading catalog…');
     catalogMock.getCatalogFill.mockReturnValue(null);
+  catalogMock.loadAllVodStreams.mockResolvedValue([]);
     (catalogMock.onCatalogFillChanged.mock.calls[0][0] as (a: string, r: string) => void)('x1', 'vod_all');
     expect(container.querySelector('.catalog-empty')?.textContent)
       .toBe('No movies are available for this account.');
+    view.deactivate();
+  });
+});
+
+describe('Movies collections', () => {
+  const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  const railTitles = () => Array.from(container.querySelectorAll('.catalog-rail-track'))
+    .map((track) => track.previousElementSibling?.textContent);
+  const sectionTitles = () => Array.from(container.querySelectorAll('.catalog-category-grid'))
+    .map((grid) => grid.previousElementSibling?.textContent);
+  const cats = [
+    { id: '1', name: 'AÇÃO' }, { id: '2', name: 'FILMES | ACAO 4K' }, { id: '3', name: 'Custom Picks' },
+    { id: '4', name: 'Netflix | Drama' }, { id: '5', name: 'NETFLIX Kids' }, { id: '6', name: 'Terror' },
+    { id: '7', name: 'Extra One' }, { id: '8', name: 'Extra Two' },
+  ];
+  const open = async () => {
+    catalogMock.loadVodCategories.mockResolvedValue(cats);
+    const view = new Movies(container, { onRevealTabBar: vi.fn(), onBack: vi.fn(), onPlayVod: vi.fn() });
+    Focus.setBase(() => view.focusScope);
+    await view.open(account);
+    return { view };
+  };
+  const byCategory = (_account: unknown, categoryId: string) => Promise.resolve({
+    '1': [vod('10', 'Alpha', '1'), vod('11', 'Bravo', '1')],
+    '2': [vod('11', 'Bravo', '2'), vod('12', 'Charlie', '2')],
+    '3': [vod('13', 'Delta', '3')],
+    '4': [vod('14', 'Echo', '4')],
+    '5': [vod('15', 'Foxtrot', '5')],
+    '6': [vod('16', 'Golf', '6')],
+  }[categoryId] ?? []);
+
+  it('merges duplicate genre categories into one rail and grid without repeating a title', async () => {
+    catalogMock.loadVodStreams.mockImplementation(byCategory);
+    const { view } = await open();
+    expect(railTitles()).toEqual(['Netflix', 'Action', 'Horror', 'Custom Picks']);
+    const action = Array.from(container.querySelectorAll('.catalog-rail')).find((rail) =>
+      rail.querySelector('.catalog-rail-title')?.textContent === 'Action')!;
+    expect(Array.from(action.querySelectorAll('.catalog-tile-name')).map((el) => el.textContent))
+      .toEqual(['Alpha', 'Bravo', 'Charlie']);
+    view.deactivate();
+  });
+
+  it('opens a merged collection with the union of its source categories', async () => {
+    catalogMock.loadVodStreams.mockImplementation(byCategory);
+    const { view } = await open();
+    const tile = container.querySelector<HTMLElement>('.catalog-cat[data-category-id="g:action"]')!;
+    expect(tile.querySelector('.catalog-cat-name')?.textContent).toBe('Action');
+    tile.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+    view.handleAction('select');
+    await settle();
+    expect(container.querySelector('.catalog-grid-title')?.textContent).toBe('Action');
+    expect(Array.from(container.querySelectorAll('.catalog-grid .catalog-tile-name')).map((el) => el.textContent))
+      .toEqual(['Alpha', 'Bravo', 'Charlie']);
+  });
+
+  it('groups the tiles into streaming, genre, and other sections with counts', async () => {
+    catalogMock.loadVodStreams.mockImplementation(byCategory);
+    catalogMock.loadAllVodStreams.mockResolvedValue([
+      vod('10', 'Alpha', '1'), vod('11', 'Bravo', '1'), vod('12', 'Charlie', '2'), vod('13', 'Delta', '3'),
+      vod('14', 'Echo', '4'), vod('15', 'Foxtrot', '5'), vod('16', 'Golf', '6'),
+    ]);
+    const { view } = await open();
+    await settle();
+    expect(sectionTitles()).toEqual(['Streaming', 'Genres', 'Other categories']);
+    const count = (id: string) => container.querySelector(`.catalog-cat[data-category-id="${id}"] .catalog-cat-count`)?.textContent;
+    expect(count('s:Netflix')).toBe('2 movies');
+    expect(count('g:action')).toBe('3 movies');
+    expect(count('6')).toBe('1 movie');
+    expect(container.querySelector('.catalog-cat[data-category-id="s:Netflix"] .catalog-cat-icon svg')).not.toBeNull();
+    view.deactivate();
+  });
+
+  it('adds smart lists first from the whole catalog and hides the ones without data', async () => {
+    catalogMock.loadVodStreams.mockImplementation(byCategory);
+    const year = new Date().getFullYear();
+    catalogMock.loadAllVodStreams.mockResolvedValue([
+      { ...vod('10', 'Alpha', '1'), rating: '8.5', added: 200 },
+      { ...vod('11', 'Bravo', '1'), rating: '9', added: 300, year },
+      { ...vod('12', 'Charlie', '2'), rating: '5', added: 100 },
+    ]);
+    const { view } = await open();
+    await settle();
+    expect(railTitles().slice(0, 3)).toEqual(['Recently added', 'New releases', 'Top rated']);
+    const rail = (name: string) => Array.from(container.querySelectorAll('.catalog-rail')).find((el) =>
+      el.querySelector('.catalog-rail-title')?.textContent === name)!;
+    const names = (name: string) => Array.from(rail(name).querySelectorAll('.catalog-tile-name')).map((el) => el.textContent);
+    expect(names('Top rated')).toEqual(['Bravo', 'Alpha']);
+    expect(names('Recently added')).toEqual(['Bravo', 'Alpha', 'Charlie']);
+    expect(names('New releases')).toEqual(['Bravo']);
+    expect(sectionTitles()[0]).toBe('Discover');
+    view.deactivate();
+  });
+
+  it('shows no smart list for a catalog cached before added and year were parsed', async () => {
+    catalogMock.loadVodStreams.mockImplementation(byCategory);
+    catalogMock.loadAllVodStreams.mockResolvedValue([vod('10', 'Alpha', '1'), vod('11', 'Bravo', '1')]);
+    const { view } = await open();
+    await settle();
+    expect(railTitles()).not.toContain('Recently added');
+    expect(railTitles()).not.toContain('New releases');
+    expect(railTitles()).not.toContain('Top rated');
+    view.deactivate();
+  });
+
+  it('keeps the browse view when the whole catalog fails to load', async () => {
+    catalogMock.loadVodStreams.mockImplementation(byCategory);
+    catalogMock.loadAllVodStreams.mockRejectedValue(new Error('timeout'));
+    const warns = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { view } = await open();
+    await settle();
+    expect(railTitles()).toContain('Action');
+    expect(eventLines(warns, 'xtream.view.load.failed').join('\n')).toContain('operation=all mode=vod');
+    warns.mockRestore();
+    view.deactivate();
+  });
+});
+
+describe('Movies rails for every group', () => {
+  it('draws a rail per non-empty category once the whole list is known, smart lists first', async () => {
+    const cats = Array.from({ length: 10 }, (_, i) => ({ id: String(i + 1), name: `Cat ${String(i + 1)}` }));
+    const all = cats.map((c, i) => ({ ...vod(`m${String(i)}`, `Movie ${String(i)}`, c.id), rating: '8' }));
+    catalogMock.loadVodCategories.mockResolvedValue(cats);
+    catalogMock.loadVodStreams.mockImplementation((_a: unknown, id: string) =>
+      Promise.resolve(all.filter((m) => m.categoryId === id)));
+    catalogMock.loadAllVodStreams.mockResolvedValue(all);
+    const view = new Movies(container, { onRevealTabBar: vi.fn(), onBack: vi.fn(), onPlayVod: vi.fn() });
+    Focus.setBase(() => view.focusScope);
+    await view.open(account);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const titles = Array.from(container.querySelectorAll('.catalog-rail-track'))
+      .map((track) => track.previousElementSibling?.textContent);
+    expect(titles).toEqual(['Top rated', ...cats.map((c) => c.name)]);
+    expect(container.querySelector('.catalog-category-grid')).toBeNull();
     view.deactivate();
   });
 });

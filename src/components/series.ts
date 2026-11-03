@@ -2,7 +2,7 @@ import type { Action, PlaylistEntry, SeriesCategory, SeriesItem, SeriesInfo, Epi
 import { html, raw, Safe } from '../utils/dom';
 import { morph } from '../utils/morph';
 import { StorageService } from '../services/storage-service';
-import { loadSeriesCategories, loadSeries, loadSeriesInfo } from '../services/xtream-catalog';
+import { loadAllSeries, loadSeriesCategories, loadSeries, loadSeriesInfo } from '../services/xtream-catalog';
 import { xtreamEpisodeUrl, type XtreamCredentials } from '../utils/xtream-url';
 import { CatalogView, buildFacts, catalogButton, catalogFacts, type CatalogAction, type CatalogHandlers, type HeroMeta, type TrailerTarget } from './catalog-view';
 import { PLAY_ICON, TAB_LIVE_ICON, watchlistIcon } from './icons';
@@ -81,6 +81,9 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     signal: AbortSignal,
   ): Promise<SeriesItem[]> {
     return loadSeries(account, categoryId, signal);
+  }
+  protected loadAllItems(account: PlaylistEntry, signal: AbortSignal): Promise<SeriesItem[]> {
+    return loadAllSeries(account, signal);
   }
   protected itemId(s: SeriesItem): string { return s.seriesId; }
   protected itemName(s: SeriesItem): string { return s.name; }

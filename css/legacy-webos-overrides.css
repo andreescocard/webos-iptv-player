@@ -42,7 +42,6 @@ html.q-no-flex-gap .live-preview-favorite { margin-right: 20px; }
  * component rule that pushes a child to the end with `margin-left: auto`.
  * Restate those so the push still wins.
  */
-html.q-no-flex-gap .epg-page-info,
 html.q-no-flex-gap .live-category-account,
 html.q-no-flex-gap .live-category-row strong,
 html.q-no-flex-gap .live-preview-clock,

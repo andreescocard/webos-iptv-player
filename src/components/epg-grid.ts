@@ -54,10 +54,12 @@ type FilterFocus = 'group' | 'search';
 type VisibleChannel = { channel: Channel; globalIndex: number };
 type GroupOption = { id: ChannelGroupId; label: string; count: number };
 
-const CHANNEL_ROW_SIZE = 72;
+// Channel and program rows keep a 12px gap for the catalog focus ring.
+const CHANNEL_ROW_SIZE = 76;
 const GROUP_ROW_SIZE = 44;
+const PROGRAMME_ROW_GAP = 12;
 // Titles can wrap, so seeded heights are replaced after each render.
-const PROGRAMME_ROW_ESTIMATE = 88;
+const PROGRAMME_ROW_ESTIMATE = 100;
 const VIRTUAL_OVERSCAN = 8;
 const EPG_VIEWPORT_FALLBACK = 900;
 
@@ -608,9 +610,6 @@ export class EpgGrid {
             </div>
             <div class="epg-channel-pane-header">
               <span class="epg-channel-pane-count">${tp('channel.count', visibleChannels.length)}</span>
-              <span class="epg-page-info">${channel?.name ?? ''}${programmes.length
-                ? html` · ${tp('epg.programCount', programmes.length)}`
-                : ''}</span>
             </div>
             <div class="epg-channel-list" id="epg-channels">
             ${visibleChannels.length ? html`
@@ -636,6 +635,12 @@ export class EpgGrid {
             </div>
           </div>
           <div class="epg-right-pane">
+            <div class="epg-page-info">
+              <h2 class="epg-schedule-title">${channel?.name ?? ''}</h2>
+              ${programmes.length
+                ? html`<span class="epg-schedule-count">${tp('epg.programCount', programmes.length)}</span>`
+                : ''}
+            </div>
             <div class="epg-date-bar">
               <div class="epg-date-list ${this.focusCol === 'dates' ? 'pane-focused' : ''}" id="epg-dates">
                 ${dateOptions.map((d, i) => {
@@ -765,8 +770,9 @@ export class EpgGrid {
     this.container.querySelectorAll<HTMLElement>('.epg-programme-item').forEach((row) => {
       const index = parseInt(row.dataset.progIdx || '-1', 10);
       if (index < 0 || this.measuredProgrammes.has(index)) return;
-      const size = row.getBoundingClientRect().height;
-      if (size <= 0) return;
+      const height = row.getBoundingClientRect().height;
+      if (height <= 0) return;
+      const size = height + PROGRAMME_ROW_GAP;
       this.measuredProgrammes.add(index);
       updates.push({ index, size });
     });

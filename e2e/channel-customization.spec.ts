@@ -223,7 +223,7 @@ test('a pointer drag lands above the row it reaches after the grabbed row scroll
   const list = await main.boundingBox();
   if (!list) throw new Error('no layout');
   await page.mouse.move(list.x + list.width - 4, up.y);
-  await page.mouse.wheel(0, -30 * pitch);
+  await page.mouse.wheel(0, -40 * pitch);
   await expect(row(2)).toBeVisible();
   await expect(main.locator('.grabbed')).toHaveCount(0);
 
@@ -245,10 +245,10 @@ test('a click in edit mode that wobbles onto the next row does not reorder', asy
   const [upper, lower] = await Promise.all([rows.nth(1).boundingBox(), rows.nth(2).boundingBox()]);
   if (!upper || !lower) throw new Error('no layout');
   const x = upper.x + upper.width / 2;
-  const from = upper.y + upper.height - 1;
-  const to = lower.y + 1;
-  // A pixel either side of the gap between the rows.
-  expect(to - from).toBeLessThan(8);
+  // A pixel either side of the boundary, midway through the ring gap between the rows.
+  const boundary = (upper.y + upper.height + lower.y) / 2;
+  const from = boundary - 1;
+  const to = boundary + 1;
 
   await page.mouse.move(x + 2, from);
   await page.mouse.move(x, from);

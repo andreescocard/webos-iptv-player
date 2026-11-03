@@ -23,6 +23,11 @@ import { lazySrc } from '../utils/lazy-images';
 import { LruCache } from '../utils/lru';
 import { preloadImage } from '../utils/preload-image';
 import { sharedCategoryPrefix, stripCategoryPrefix } from '../utils/category-prefix';
+import {
+  collectionIcon, genreLabelKey, planCategories, SMART_IDS,
+  type CollectionKind, type GenreId, type SmartKind,
+} from '../utils/category-groups';
+import { newReleases, recentlyAdded, topRated, type SmartTitle } from '../utils/smart-collections';
 import { StorageService } from '../services/storage-service';
 import {
   catalogParentalRequest,
@@ -129,6 +134,28 @@ export function catalogButton(action: CatalogAction, surface: 'detail' | 'hero')
         data-action="${action.id}" aria-busy="${action.busy ? 'true' : 'false'}">${content}</button>`;
 }
 
+// One browsable entry of the "all categories" view and the rails: a smart list
+// ("Top rated"), a streaming service, a canonical genre, or a category on its
+// own. A collection of several provider categories has a virtual id; one of a
+// single category keeps that category's id.
+export interface Collection<C> {
+  kind: CollectionKind;
+  category: C;
+  // Real provider category ids behind it; empty for a smart list.
+  sourceIds: string[];
+  smart?: SmartKind;
+  service?: string;
+  genre?: GenreId;
+}
+
+export interface CollectionSection<C> {
+  key: string;
+  title: string;
+  collections: Collection<C>[];
+}
+
+const SMART_ORDER: SmartKind[] = ['recent', 'new', 'top'];
+
 interface BrowseReturn {
   el: HTMLElement;
   railKey: string;
@@ -171,11 +198,15 @@ function isScroller(overflow: string): boolean {
 // positions, and focused tile exactly as they were.
 // Subclasses supply the catalog loaders, item accessors, and the detail
 // rendering / playback specifics.
-export abstract class CatalogView<C extends { id: string; name: string }, I> {
+export abstract class CatalogView<C extends { id: string; name: string }, I extends SmartTitle> {
   protected nav: SpatialNav;
   protected account: PlaylistEntry | null = null;
   protected mode: Mode = 'browse';
   protected categories: C[] = [];
+  protected collections: Collection<C>[] = [];
+  // The account's whole list, once loaded; it feeds the smart lists and the tile counts.
+  private allItems: I[] | null = null;
+  private allCounts: Map<string, number> | null = null;
   protected railGroups: { category: C; items: I[] }[] = [];
   protected resume: ResumeEntry[] = [];
   protected itemsByCategory: Record<string, I[]> = {};
@@ -296,6 +327,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     categoryId: string,
     signal: AbortSignal,
   ): Promise<I[]>;
+  protected abstract loadAllItems(account: PlaylistEntry, signal: AbortSignal): Promise<I[]>;
   protected abstract itemId(item: I): string;
   protected abstract itemName(item: I): string;
   protected abstract itemPoster(item: I): string;
@@ -352,11 +384,24 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.gridVirtualizer.setScrollOffset(0);
     this.renderGrid(false);
   }
-  protected categoryIcon(_category: C): string { return ''; }
-  protected categorySections(): { key: string; title: string; categories: C[] }[] {
-    return this.categories.length > this.railGroups.length
-      ? [{ key: 'all-categories', title: t('catalog.allCategories'), categories: this.categories }]
-      : [];
+  // Categories carry only an id and a name; a collection's category is made from them.
+  protected makeCategory(id: string, name: string): C {
+    return { id, name } as C;
+  }
+  protected categorySections(): CollectionSection<C>[] {
+    // Secondary entry: once every collection has its own rail it is redundant.
+    if (this.collections.length <= this.railGroups.length) return [];
+    const of = (kind: CollectionKind): Collection<C>[] => this.collections.filter((c) => c.kind === kind);
+    const sections = [
+      { key: 'smart', title: t('catalog.discover'), collections: of('smart') },
+      { key: 'streaming', title: t('catalog.streaming'), collections: of('streaming') },
+      { key: 'genres', title: t('catalog.genres'), collections: of('genre') },
+      { key: 'other', title: t('catalog.otherCategories'), collections: of('other') },
+    ].filter((section) => section.collections.length > 0);
+    if (sections.length === 1 && sections[0].key === 'other') {
+      sections[0].title = t('catalog.allCategories');
+    }
+    return sections;
   }
   // The hero's extra facts, from the item's detail info (null when it has none).
   protected abstract loadHeroMeta(
@@ -461,10 +506,162 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.renderDetail();
     return true;
   }
-  // Category names without a provider prefix every category shares.
+  // A collection's name, or a category's name without the prefix every category shares.
   protected categoryLabel(category: C): string {
+    const collection = this.collectionOf(category.id);
+    if (collection && collection.kind !== 'other') return this.collectionLabel(collection);
     // Exotic separators (e.g. a slashed bar) can render as a blank box on the TV font.
     return stripCategoryPrefix(category.name, this.categoryPrefix).replace(/\s*[∤∣¦│┃‖]\s*/g, ' · ');
+  }
+
+  protected collectionOf(categoryId: string): Collection<C> | null {
+    return this.collections.filter((c) => c.category.id === categoryId)[0] ?? null;
+  }
+
+  protected collectionLabel(collection: Collection<C>): string {
+    if (collection.smart) {
+      return t(collection.smart === 'top' ? 'catalog.topRated'
+        : collection.smart === 'new' ? 'catalog.newReleases' : 'catalog.recentlyAdded');
+    }
+    if (collection.service) return collection.service;
+    if (collection.genre) return t(genreLabelKey(collection.genre));
+    return this.categoryLabel(collection.category);
+  }
+
+  // How many titles a collection holds, or null while that is still unknown.
+  protected collectionCount(collection: Collection<C>): number | null {
+    const cached = this.itemsByCategory[collection.category.id];
+    if (collection.smart) return cached ? cached.length : null;
+    if (this.allCounts) {
+      const counts = this.allCounts;
+      return collection.sourceIds.reduce((sum, id) => sum + (counts.get(id) ?? 0), 0);
+    }
+    return cached ? cached.length : null;
+  }
+
+  // Groups the categories into collections; smart lists need the whole catalog.
+  private organize(): void {
+    const byId = new Map(this.categories.map((c) => [c.id, c] as [string, C]));
+    const smart: Collection<C>[] = [];
+    SMART_ORDER.forEach((kind) => {
+      const items = this.smartItems(kind);
+      const id = SMART_IDS[kind];
+      if (!items.length) {
+        delete this.itemsByCategory[id];
+        return;
+      }
+      this.itemsByCategory[id] = items;
+      smart.push({ kind: 'smart', smart: kind, sourceIds: [], category: this.makeCategory(id, kind) });
+    });
+    const grouped = planCategories(this.categories, this.categoryPrefix).map((group): Collection<C> => {
+      const real = byId.get(group.sourceIds[0])!;
+      if (group.kind === 'other') return { kind: 'other', sourceIds: group.sourceIds, category: real };
+      const id = group.sourceIds.length === 1 ? real.id : group.key;
+      return {
+        kind: group.kind,
+        sourceIds: group.sourceIds,
+        service: group.service,
+        genre: group.genre,
+        category: this.makeCategory(id, group.service ?? group.genre ?? ''),
+      };
+    });
+    this.collections = [...smart, ...grouped];
+  }
+
+  private smartItems(kind: SmartKind): I[] {
+    const all = this.allItems;
+    if (!all) return [];
+    const limit = CONFIG.XTREAM.SMART_ITEMS;
+    if (kind === 'top') return topRated(all, limit);
+    return kind === 'new' ? newReleases(all, limit) : recentlyAdded(all, limit);
+  }
+
+  // Smart lists always get a rail; the rest are capped.
+  private railCollections(limit: number = CONFIG.XTREAM.RAIL_CATEGORIES): Collection<C>[] {
+    let others = 0;
+    return this.collections.filter((c) => c.kind === 'smart' || others++ < limit);
+  }
+
+  private buildRailGroups(): { category: C; items: I[] }[] {
+    const groups: { category: C; items: I[] }[] = [];
+    this.railCollections(CONFIG.XTREAM.MAX_RAILS).forEach((c) => {
+      const items = this.itemsByCategory[c.category.id];
+      if (items && items.length) groups.push({ category: c.category, items: items.slice(0, CONFIG.XTREAM.RAIL_ITEMS) });
+    });
+    return groups;
+  }
+
+  // Every title of a collection's categories, once each, in provider order.
+  private loadCollectionItems(
+    account: PlaylistEntry,
+    collection: Collection<C>,
+    signal: AbortSignal,
+  ): Promise<I[]> {
+    if (collection.smart) return Promise.resolve(this.itemsByCategory[collection.category.id] ?? []);
+    if (collection.sourceIds.length === 1) {
+      return this.loadVisibleItems(account, collection.sourceIds[0], signal);
+    }
+    return this.mergeCategoryItems(collection.sourceIds, signal);
+  }
+
+  private async mergeCategoryItems(sourceIds: string[], signal: AbortSignal): Promise<I[]> {
+    const settled = await Promise.all(sourceIds.map((id) =>
+      this.categoryItems(id, signal).then((items): I[] | Error => items, (err: unknown) => err as Error)));
+    const failure = settled.filter((r): r is Error => r instanceof Error)[0];
+    if (failure && settled.every((r) => r instanceof Error)) throw failure;
+    const seen = new Set<string>();
+    const merged: I[] = [];
+    settled.forEach((result) => {
+      if (result instanceof Error) return;
+      result.forEach((item) => {
+        const id = this.itemId(item);
+        if (seen.has(id)) return;
+        seen.add(id);
+        merged.push(item);
+      });
+    });
+    return merged;
+  }
+
+  // Loads the whole catalog in the background; it unlocks the smart lists and counts.
+  private async loadWholeCatalog(account: PlaylistEntry, signal: AbortSignal): Promise<void> {
+    let all: I[];
+    try {
+      all = await this.loadAllItems(account, signal);
+    } catch (err) {
+      if (!signal.aborted) {
+        log.warn(
+          'Catalog list load failed',
+          'event=xtream.view.load.failed',
+          'operation=all',
+          `mode=${this.parentalKind}`,
+          err,
+        );
+      }
+      return;
+    }
+    if (signal.aborted || this.account?.id !== account.id) return;
+    const visible = this.withoutConcealed(account, all, '');
+    this.allItems = visible;
+    const counts = new Map<string, number>();
+    visible.forEach((item) => {
+      const id = this.itemCategoryId(item);
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    });
+    this.allCounts = counts;
+    this.organize();
+    // The whole list builds every other rail without another request.
+    this.railCollections(CONFIG.XTREAM.MAX_RAILS).forEach((c) => {
+      const id = c.category.id;
+      if (c.smart || this.itemsByCategory[id]) return;
+      const sources = new Set(c.sourceIds);
+      const items = visible.filter((item) => sources.has(this.itemCategoryId(item)));
+      if (items.length) this.itemsByCategory[id] = items;
+    });
+    this.railGroups = this.buildRailGroups();
+    if (!this.browseRendered) return;
+    if (this.mode === 'browse') this.renderBrowse(false);
+    else this.paintBrowse();
   }
 
   // The active mode's layer; hidden layers keep their DOM but never take focus.
@@ -831,6 +1028,9 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     this.clearLayer('grid');
     this.clearLayer('detail');
     this.categories = [];
+    this.collections = [];
+    this.allItems = null;
+    this.allCounts = null;
     this.categoryPrefix = null;
     this.railGroups = [];
     this.itemsByCategory = {};
@@ -855,10 +1055,12 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
         categoryId: category.id,
       }));
       this.categoryPrefix = sharedCategoryPrefix(this.categories.map((c) => c.name));
-      const railCats = this.categories.slice(0, CONFIG.XTREAM.RAIL_CATEGORIES);
+      this.organize();
+      void this.loadWholeCatalog(account, signal);
+      const railCats = this.railCollections().filter((c) => !c.smart);
       // Settle each rail on its own: one failing category must not blank the rest.
       const loaded = await Promise.all(
-        railCats.map((c) => this.loadVisibleItems(account, c.id, signal).then(
+        railCats.map((c) => this.loadCollectionItems(account, c, signal).then(
           (items): I[] | null => items,
           (err: unknown): null => {
             if (!signal.aborted) {
@@ -875,20 +1077,20 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
         )),
       );
       if (signal.aborted || this.account?.id !== account.id) return;
-      const groups: { category: C; items: I[] }[] = [];
-      railCats.forEach((category, i) => {
+      let kept = 0;
+      railCats.forEach((collection, i) => {
         const items = loaded[i];
         if (!items) return;
-        this.itemsByCategory[category.id] = items;
-        groups.push({ category, items: items.slice(0, CONFIG.XTREAM.RAIL_ITEMS) });
+        kept++;
+        this.itemsByCategory[collection.category.id] = items;
       });
-      this.railGroups = groups;
-      if (groups.length < railCats.length) {
+      this.railGroups = this.buildRailGroups();
+      if (kept < railCats.length) {
         log.warn(
           'Catalog rails partially loaded',
           'event=xtream.view.rails.partial',
           `mode=${this.parentalKind}`,
-          `kept=${String(groups.length)}`,
+          `kept=${String(kept)}`,
           `total=${String(railCats.length)}`,
         );
       }
@@ -1414,7 +1616,10 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     categoryId: string,
     signal: AbortSignal,
   ): Promise<I[]> {
-    const items = await this.loadItems(account, categoryId, signal);
+    return this.withoutConcealed(account, await this.loadItems(account, categoryId, signal), categoryId);
+  }
+
+  private withoutConcealed(account: PlaylistEntry, items: I[], categoryId: string): I[] {
     if (!ParentalControlService.concealing) return items;
     return items.filter(item => !ParentalControlService.isConcealed(
       catalogParentalRequest(this.parentalKind, {
@@ -1456,18 +1661,17 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     const account = this.account;
     const signal = this.requestSignal;
     if (!signal || signal.aborted) return;
-    this.gridCategory = this.categories.find((c) => c.id === categoryId) ?? null;
+    const collection = this.collectionOf(categoryId);
+    this.gridCategory = collection?.category ?? this.categories.find((c) => c.id === categoryId) ?? null;
     const request = ++this.gridRequest;
     this.gridReturnKey = null;
     this.clearLayer('grid');
     if (!this.itemsByCategory[categoryId]) {
       this.renderLoading('grid');
       try {
-        this.itemsByCategory[categoryId] = await this.loadVisibleItems(
-          account,
-          categoryId,
-          signal,
-        );
+        this.itemsByCategory[categoryId] = collection
+          ? await this.loadCollectionItems(account, collection, signal)
+          : await this.loadVisibleItems(account, categoryId, signal);
       } catch (err) {
         if (signal.aborted) return;
         log.error(
@@ -1543,6 +1747,16 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
     `;
   }
 
+  private isSmartRail(group: { category: C }): boolean {
+    return !!this.collectionOf(group.category.id)?.smart;
+  }
+
+  private railLockBadge(id: string): Safe | '' {
+    const collection = this.collectionOf(id);
+    if (collection && (collection.smart || collection.sourceIds.length !== 1)) return '';
+    return raw(categoryLockBadge(this.parentalKind, this.account!.id, collection ? collection.sourceIds[0] : id));
+  }
+
   // A rail shows the first RAIL_ITEMS titles; a trailing tile opens the full grid.
   private categoryRail(group: { category: C; items: I[] }): Safe {
     const id = group.category.id;
@@ -1553,7 +1767,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
         <div class="catalog-tile catalog-see-all" data-focusable data-key="all:${id}"
              data-category-id="${id}">
           <div class="catalog-poster-wrap catalog-see-all-card">
-            ${raw(categoryLockBadge(this.parentalKind, this.account!.id, id))}
+            ${this.railLockBadge(id)}
             ${raw(SEE_ALL_ICON)}
             <div class="catalog-see-all-label">${t('catalog.seeAll')}</div>
             <div class="catalog-see-all-count">${this.itemCount(total)}</div>
@@ -1562,6 +1776,29 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       `);
     }
     return this.rail(`cat:${id}`, this.categoryLabel(group.category), tiles);
+  }
+
+  // A tile of the "all categories" view: icon, name, and how many titles.
+  private collectionTile(collection: Collection<C>): Safe {
+    const id = collection.category.id;
+    const count = this.collectionCount(collection);
+    const icon = collectionIcon(collection.kind, {
+      genre: collection.genre,
+      smart: collection.smart,
+      label: this.categoryLabel(collection.category),
+    });
+    const single = collection.sourceIds.length === 1 && collection.kind !== 'smart';
+    return html`
+      <div class="catalog-cat catalog-cat-with-icon" data-focusable
+           data-key="c:${id}" data-category-id="${id}">${
+        single ? raw(categoryLockBadge(this.parentalKind, this.account!.id, collection.sourceIds[0])) : ''
+      }<span class="catalog-cat-icon">${raw(icon)}</span>
+        <span class="catalog-cat-text">
+          <span class="catalog-cat-name">${this.categoryLabel(collection.category)}</span>${
+            count === null ? '' : html`<span class="catalog-cat-count">${this.itemCount(count)}</span>`}
+        </span>
+      </div>
+    `;
   }
 
   protected rail(key: string, title: string, items: Safe[]): Safe {
@@ -1604,7 +1841,6 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
   protected renderBrowse(restoreFocus = true): void {
     this.browseRendered = true;
     this.showLayer('browse');
-    const browse = this.layers.browse;
     this.resume = this.visibleResume(this.account!.id);
     if (this.heroPending && this.heroTimer === null) {
       this.heroItem = this.heroPending;
@@ -1616,6 +1852,19 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
       this.heroCarousel = this.heroCarouselItems();
       this.heroItem = this.heroCarousel[0] ?? this.initialHero();
     }
+    this.paintBrowse();
+    if (this.heroItem) this.fetchHeroMeta(this.heroItem);
+    this.prefetchNextHero();
+    if (this.heroCarouselTimer === null) this.scheduleCarousel();
+    if (restoreFocus) {
+      this.restoringBrowse = true;
+      try { this.restoreBrowseFocus(); } finally { this.restoringBrowse = false; }
+    }
+  }
+
+  // Redraws the browse layer in place, even while a grid or detail covers it.
+  private paintBrowse(): void {
+    const browse = this.layers.browse;
     const continueRail = this.continueRail();
     const watchlistRail = this.watchlistRail();
     const fillNote = this.fillNote();
@@ -1633,25 +1882,16 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
               <div class="catalog-rails-spacer catalog-hero-body" data-key="hero-body"
                    data-rail-key="hero">${this.heroText(html`${this.carouselDots()}${fillNote}`)}</div>
               <div class="catalog-rails-body" data-key="rails-body">
+                ${this.railGroups.filter((r) => this.isSmartRail(r)).map((r) => this.categoryRail(r))}
                 ${continueRail}
                 ${watchlistRail}
-                ${this.railGroups.map((r) => this.categoryRail(r))}
+                ${this.railGroups.filter((r) => !this.isSmartRail(r)).map((r) => this.categoryRail(r))}
                 ${categorySections.map((section) => html`
                   <div class="catalog-rail" data-key="rail:${section.key}"
                        data-rail-key="${section.key}">
                     <h2 class="catalog-rail-title">${section.title}</h2>
                     <div class="catalog-category-grid">
-                      ${section.categories.map((c) => {
-                        const icon = this.categoryIcon(c);
-                        return html`
-                          <div class="catalog-cat ${icon ? 'catalog-cat-with-icon' : ''}" data-focusable
-                               data-key="c:${c.id}" data-category-id="${c.id}">${
-                            raw(categoryLockBadge(this.parentalKind, this.account!.id, c.id))
-                          }${icon ? html`<span class="catalog-cat-icon">${raw(icon)}</span>` : ''}
-                            <span class="catalog-cat-name">${this.categoryLabel(c)}</span>
-                          </div>
-                        `;
-                      })}
+                      ${section.collections.map((c) => this.collectionTile(c))}
                     </div>
                   </div>
                 `)}
@@ -1660,13 +1900,6 @@ export abstract class CatalogView<C extends { id: string; name: string }, I> {
           `}
       </div>
     `);
-    if (this.heroItem) this.fetchHeroMeta(this.heroItem);
-    this.prefetchNextHero();
-    if (this.heroCarouselTimer === null) this.scheduleCarousel();
-    if (restoreFocus) {
-      this.restoringBrowse = true;
-      try { this.restoreBrowseFocus(); } finally { this.restoringBrowse = false; }
-    }
   }
 
   protected renderGrid(restoreFocus = true): void {

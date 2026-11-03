@@ -108,6 +108,11 @@ export const ZH_CN_MESSAGES = {
   'catalog.sortZa': 'Z–A',
   'catalog.topRated': '评分最高',
   'catalog.streaming': '流媒体',
+  'catalog.discover': '发现',
+  'catalog.genres': '类型',
+  'catalog.otherCategories': '其他分类',
+  'catalog.newReleases': '新上线',
+  'catalog.recentlyAdded': '最近添加',
   'catalog.movieCount': {
     other: '共 {count} 部',
   },

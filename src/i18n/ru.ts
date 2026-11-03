@@ -114,6 +114,11 @@ export const RU_MESSAGES = {
   'catalog.sortZa': 'Z–A',
   'catalog.topRated': 'С высокой оценкой',
   'catalog.streaming': 'Стриминг',
+  'catalog.discover': 'Подборки',
+  'catalog.genres': 'Жанры',
+  'catalog.otherCategories': 'Другие категории',
+  'catalog.newReleases': 'Новинки',
+  'catalog.recentlyAdded': 'Недавно добавленные',
   'catalog.movieCount': {
     one: '{count} фильм',
     few: '{count} фильма',

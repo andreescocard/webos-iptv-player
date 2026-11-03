@@ -7,7 +7,7 @@ import { isLetterOrNumber, stripCombiningDiacritics } from './unicode-text';
 
 export type MovieSort = 'original' | 'az' | 'za' | 'rating';
 
-function movieRating(raw: string): number | null {
+export function movieRating(raw: string): number | null {
   const text = raw.trim().replace(',', '.');
   if (!/^\d+(?:\.\d+)?$/.test(text)) return null;
   const rating = Number(text);
@@ -106,18 +106,41 @@ export function relatedMovies(movie: VodItem, items: VodItem[], limit: number): 
 }
 
 // Only explicit service labels: bare "prime", missing plus signs, and partial
-// words are not evidence of a service category. Longer labels precede aliases.
+// words are not evidence of a service category. Longer labels precede aliases;
+// the order is also the order services appear in the browse view. Matching runs
+// on accent-folded text, and `i` makes it case-insensitive.
 const STREAMING_RULES: Array<{ name: string; pattern: RegExp }> = [
   { name: 'Netflix', pattern: /netflix/gi },
-  { name: 'Prime Video', pattern: /prime\s+video|amazon\s+prime/gi },
-  { name: 'Disney+', pattern: /disney\s*\+/gi },
-  { name: 'Apple TV+', pattern: /apple\s+tv\s*\+/gi },
-  { name: 'Max', pattern: /hbo\s+max|max/gi },
-  { name: 'Paramount+', pattern: /paramount\s*\+/gi },
+  { name: 'Prime Video', pattern: /prime\s*video|amazon/gi },
+  { name: 'Disney+', pattern: /disney\s*(?:\+|plus)/gi },
+  { name: 'Apple TV+', pattern: /apple\s*tv\s*(?:\+|plus)/gi },
+  { name: 'Max', pattern: /hbo\s*max|hbo|max/gi },
+  { name: 'Paramount+', pattern: /paramount\s*(?:\+|plus)/gi },
   { name: 'Globoplay', pattern: /globoplay/gi },
+  { name: 'Star+', pattern: /star\s*(?:\+|plus)/gi },
+  { name: 'Crunchyroll', pattern: /crunchyroll/gi },
+  { name: 'Discovery+', pattern: /discovery\s*(?:\+|plus)/gi },
+  { name: 'Telecine', pattern: /telecine/gi },
+  { name: 'Claro tv+', pattern: /claro\s*tv\s*(?:\+|plus)|claro\s*video|clarovideo/gi },
+  { name: 'Lionsgate+', pattern: /lions\s*gate\s*(?:\+|plus)?|starz/gi },
+  { name: 'Hulu', pattern: /hulu/gi },
+  { name: 'Peacock', pattern: /peacock/gi },
+  { name: 'AMC+', pattern: /amc\s*(?:\+|plus)/gi },
+  { name: 'Pluto TV', pattern: /pluto\s*tv/gi },
+  { name: 'Looke', pattern: /looke/gi },
+  { name: 'MUBI', pattern: /mubi/gi },
+  { name: 'Univer Video', pattern: /univer(?:\s*video)?/gi },
+  { name: 'Universal+', pattern: /universal\s*(?:\+|plus)/gi },
 ];
 
-export function streamingCategory(name: string): string | null {
+export const STREAMING_SERVICES: string[] = STREAMING_RULES.map((rule) => rule.name);
+
+function foldText(value: string): string {
+  return stripCombiningDiacritics(value.normalize('NFD'));
+}
+
+export function streamingCategory(rawName: string): string | null {
+  const name = foldText(rawName);
   for (const rule of STREAMING_RULES) {
     rule.pattern.lastIndex = 0;
     let match: RegExpExecArray | null;

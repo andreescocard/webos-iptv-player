@@ -33,9 +33,10 @@ import { VirtualList } from '../utils/virtual-list';
 import { VirtualScrollGuard } from '../utils/virtual-scroll';
 import { CONFIG } from '../config';
 
-// Base strides mirror the row heights and spacing in css/channel-list.css.
-const CHANNEL_ROW_STRIDE = 88;
-const GROUP_ROW_STRIDE = 68;
+// Base strides mirror the row heights and spacing in css/channel-list.css;
+// the 12px gap holds the catalog focus ring between rows.
+const CHANNEL_ROW_STRIDE = 96;
+const GROUP_ROW_STRIDE = 72;
 const CHANNEL_OVERSCAN = 12;
 const CHANNEL_VIEWPORT_FALLBACK = 900;
 
@@ -389,6 +390,10 @@ export class ChannelList {
                 ))}
             </div>
           </div>
+        </div>
+        <div class="channel-section-header" data-key="channel-section-header">
+          <h2 class="channel-section-title">${
+            groups.find(group => group.id === this.currentGroup)?.label ?? ''}</h2>
         </div>
         <div class="channel-main" data-nav-container data-nav-enter="last-focused">
           <div class="channel-list-scroll ${showingRecent ? 'recent-list' : ''}">

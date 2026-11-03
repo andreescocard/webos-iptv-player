@@ -110,6 +110,11 @@ export const ES_MESSAGES = {
   'catalog.sortZa': 'Z–A',
   'catalog.topRated': 'Mejor valoradas',
   'catalog.streaming': 'Streaming',
+  'catalog.discover': 'Descubrir',
+  'catalog.genres': 'Géneros',
+  'catalog.otherCategories': 'Otras categorías',
+  'catalog.newReleases': 'Estrenos',
+  'catalog.recentlyAdded': 'Añadido recientemente',
   'catalog.movieCount': {
     one: '{count} película',
     other: '{count} películas',

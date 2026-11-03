@@ -108,6 +108,11 @@ export const TR_MESSAGES = {
   'catalog.sortZa': 'Z–A',
   'catalog.topRated': 'En yüksek puanlı',
   'catalog.streaming': 'Çevrimiçi platformlar',
+  'catalog.discover': 'Keşfet',
+  'catalog.genres': 'Türler',
+  'catalog.otherCategories': 'Diğer kategoriler',
+  'catalog.newReleases': 'Yeni çıkanlar',
+  'catalog.recentlyAdded': 'Son eklenenler',
   'catalog.movieCount': {
     other: '{count} film',
   },

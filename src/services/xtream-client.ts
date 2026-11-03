@@ -96,6 +96,19 @@ function firstNonEmptyString(...values: unknown[]): string {
   return '';
 }
 
+// The optional list-entry stamps; a key is only present when the panel sent a
+// usable value, so lists without them keep their old shape.
+function listStamps(entry: Record<string, unknown>, stamp: unknown): { added?: number; year?: number } {
+  const added = Math.floor(toNumber(stamp));
+  const year = Number(/(?:^|\D)(19\d{2}|20\d{2})(?!\d)/.exec(
+    firstNonEmptyString(entry.year, entry.releasedate, entry.release_date, entry.releaseDate),
+  )?.[1]);
+  return {
+    ...(added > 0 ? { added } : {}),
+    ...(year > 0 ? { year } : {}),
+  };
+}
+
 // backdrop_path is a list of image URLs on most panels, a string on some.
 function firstBackdrop(value: unknown): string {
   if (Array.isArray(value)) return firstNonEmptyString(...value);
@@ -418,6 +431,7 @@ export function createXtreamClient(creds: XtreamCredentials, accountId = '') {
           rating: toStr(s.rating),
           categoryId: toStr(s.category_id),
           containerExtension: toStr(s.container_extension),
+          ...listStamps(s, s.added),
         }))
         .filter((v) => v.streamId !== '');
     },
@@ -478,6 +492,7 @@ export function createXtreamClient(creds: XtreamCredentials, accountId = '') {
           poster: toStr(s.cover),
           rating: toStr(s.rating),
           categoryId: toStr(s.category_id),
+          ...listStamps(s, s.last_modified ?? s.added),
         }))
         .filter((s) => s.seriesId !== '');
     },

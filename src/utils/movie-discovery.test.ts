@@ -158,3 +158,25 @@ describe('movieCategoryIcon', () => {
     expect(recognized).not.toContain('onerror');
   });
 });
+
+describe('streamingCategory services', () => {
+  it('recognizes each service label, ignoring case and accents', () => {
+    const cases: Array<[string, string]> = [
+      ['Filmes | NETFLIX', 'Netflix'], ['Amazon Prime Video', 'Prime Video'], ['Prime Video 4K', 'Prime Video'],
+      ['Amazon', 'Prime Video'], ['Disney+', 'Disney+'], ['Disney Plus', 'Disney+'], ['Apple TV+', 'Apple TV+'],
+      ['HBO Max', 'Max'], ['HBO', 'Max'], ['Max Originals', 'Max'], ['Paramount+', 'Paramount+'],
+      ['Globoplay', 'Globoplay'], ['Star+', 'Star+'], ['Crunchyroll', 'Crunchyroll'],
+      ['Discovery+', 'Discovery+'], ['Pluto TV', 'Pluto TV'], ['Telecine', 'Telecine'], ['Looke', 'Looke'],
+      ['Claro tv+', 'Claro tv+'], ['Claro Vídeo', 'Claro tv+'], ['Lionsgate+', 'Lionsgate+'], ['Starz', 'Lionsgate+'],
+      ['Hulu', 'Hulu'], ['Peacock', 'Peacock'], ['AMC+', 'AMC+'], ['MUBI', 'MUBI'],
+      ['Univer Video', 'Univer Video'], ['Univer', 'Univer Video'], ['Universal+', 'Universal+'],
+    ];
+    for (const [name, service] of cases) expect(streamingCategory(name)).toBe(service);
+  });
+
+  it('rejects near misses', () => {
+    for (const name of ['Universal', 'Universe', 'Star', 'Starship', 'Hulukai', 'Claro', 'Discovery', 'Peacocks']) {
+      expect(streamingCategory(name)).toBeNull();
+    }
+  });
+});

@@ -2,14 +2,14 @@ import type { Action, PlaylistEntry, VodCategory, VodItem, VodInfo, ResumeKind, 
 import { html, Safe } from '../utils/dom';
 import { morph } from '../utils/morph';
 import { StorageService } from '../services/storage-service';
-import { loadVodCategories, loadVodStreams, loadVodInfo } from '../services/xtream-catalog';
+import { loadAllVodStreams, loadVodCategories, loadVodStreams, loadVodInfo } from '../services/xtream-catalog';
 import { xtreamVodUrl } from '../utils/xtream-url';
 import { CatalogView, buildFacts, catalogButton, catalogFacts, type CatalogAction, type HeroMeta, type TrailerTarget } from './catalog-view';
 import { PLAY_ICON, watchlistIcon } from './icons';
 import { showToast } from './toast';
 import { t, tp } from '../i18n';
 import {
-  movieCategoryIcon, randomGoodMovie, randomGoodMovies, relatedMovies, sortMovies, streamingCategory, type MovieSort,
+  randomGoodMovie, randomGoodMovies, relatedMovies, sortMovies, type MovieSort,
 } from '../utils/movie-discovery';
 import { CONFIG } from '../config';
 
@@ -107,32 +107,6 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
       </div>`;
   }
 
-  protected categoryIcon(category: VodCategory): string {
-    return movieCategoryIcon(this.categoryLabel(category));
-  }
-
-  protected categoryLabel(category: VodCategory): string {
-    const label = super.categoryLabel(category);
-    const service = streamingCategory(category.name);
-    return service && !streamingCategory(label) ? `${service} · ${label}` : label;
-  }
-
-  protected categorySections(): { key: string; title: string; categories: VodCategory[] }[] {
-    const regular: VodCategory[] = [];
-    const streaming: VodCategory[] = [];
-    this.categories.forEach((category) => {
-      (streamingCategory(category.name) ? streaming : regular).push(category);
-    });
-    return [
-      ...(streaming.length ? [{ key: 'streaming', title: t('catalog.streaming'), categories: streaming }] : []),
-      ...(regular.length ? [{
-        key: 'all-categories',
-        title: t(streaming.length ? 'parental.categories' : 'catalog.allCategories'),
-        categories: regular,
-      }] : []),
-    ];
-  }
-
   protected loadCategories(
     account: PlaylistEntry,
     signal: AbortSignal,
@@ -145,6 +119,9 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
     signal: AbortSignal,
   ): Promise<VodItem[]> {
     return loadVodStreams(account, categoryId, signal);
+  }
+  protected loadAllItems(account: PlaylistEntry, signal: AbortSignal): Promise<VodItem[]> {
+    return loadAllVodStreams(account, signal);
   }
   protected itemId(v: VodItem): string { return v.streamId; }
   protected itemName(v: VodItem): string { return v.name; }

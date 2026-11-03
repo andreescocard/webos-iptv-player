@@ -506,6 +506,9 @@ export interface VodItem {
   rating: string;
   categoryId: string;
   containerExtension: string;
+  // Unix seconds the panel added it, and its release year; absent in lists cached before they were parsed.
+  added?: number;
+  year?: number;
 }
 
 // A sidecar subtitle file (SRT or WebVTT) delivered alongside an Xtream VOD
@@ -549,6 +552,9 @@ export interface SeriesItem {
   poster: string;
   rating: string;
   categoryId: string;
+  // Unix seconds of the panel's last change, and the release year; absent in lists cached before they were parsed.
+  added?: number;
+  year?: number;
 }
 
 export interface Episode {

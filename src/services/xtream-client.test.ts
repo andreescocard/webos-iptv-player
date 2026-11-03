@@ -311,6 +311,22 @@ describe('XtreamClient VOD', () => {
     }]);
   });
 
+  it('reads added and year stamps from VOD and series lists, and omits them when absent', async () => {
+    fetchTextMock.mockResolvedValueOnce(JSON.stringify([
+      { stream_id: 1, name: 'A', category_id: '1', added: '1700000000', year: '2024' },
+      { stream_id: 2, name: 'B', category_id: '1', releaseDate: '2021-05-01' },
+      { stream_id: 3, name: 'C', category_id: '1', added: 'bad', year: '12024' },
+    ]));
+    const vods = await createXtreamClient(creds, 'acc1').getVodStreams('1');
+    expect(vods.map((v) => [v.added, v.year])).toEqual([[1700000000, 2024], [undefined, 2021], [undefined, undefined]]);
+    expect(Object.keys(vods[2])).not.toContain('added');
+    fetchTextMock.mockResolvedValueOnce(JSON.stringify([
+      { series_id: 5, name: 'S', category_id: '2', last_modified: '1690000000', release_date: '2019-01-01' },
+    ]));
+    const shows = await createXtreamClient(creds, 'acc1').getSeries('2');
+    expect([shows[0].added, shows[0].year]).toEqual([1690000000, 2019]);
+  });
+
   it('getVodStreams with no category omits the category_id param', async () => {
     fetchTextMock.mockResolvedValue('[]');
     await createXtreamClient(creds).getVodStreams();

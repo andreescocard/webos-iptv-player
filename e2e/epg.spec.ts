@@ -457,7 +457,7 @@ test.describe('Guide pointer and keys', () => {
       const boxes = rows.map(row => row.getBoundingClientRect());
       return boxes.slice(1).map((box, i) => box.top - boxes[i].bottom);
     });
-    expect(gaps.every(gap => gap >= -1 && gap <= 1)).toBe(true);
+    expect(gaps.every(gap => gap >= 11 && gap <= 13)).toBe(true);
   });
 
   test('hovering a programme moves the ring off the channel, which stays selected', async ({ page }) => {

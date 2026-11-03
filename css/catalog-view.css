@@ -204,7 +204,7 @@ html[data-animation="essential"] .catalog-tile { transition: none; }
 
 .catalog-cat-with-icon {
   width: 332px;
-  height: calc(80px + 64px * var(--font-scale));
+  height: calc(80px + 92px * var(--font-scale));
   justify-content: flex-start;
   padding: 16px 20px;
   text-align: left;
@@ -220,12 +220,22 @@ html[data-animation="essential"] .catalog-tile { transition: none; }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+.catalog-cat-text { min-width: 0; display: flex; flex-direction: column; }
 .catalog-cat-name {
   min-width: 0;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
+}
+.catalog-cat-count {
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .movies-detail-head { display: flex; gap: 56px; }

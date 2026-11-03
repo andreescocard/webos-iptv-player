@@ -5,7 +5,7 @@ import type { PlaylistEntry, WatchlistEntry, WatchlistKind } from '../types';
 const { catalogMock, storageMock, watchlistState, toastMock } = vi.hoisted(() => {
   const watchlistState = { entries: [] as WatchlistEntry[] };
   return {
-    catalogMock: { loadSeriesCategories: vi.fn(), loadSeries: vi.fn(), loadSeriesInfo: vi.fn(), getCatalogFill: vi.fn((): { done: number; total: number } | null => null), onCatalogFillChanged: vi.fn() },
+    catalogMock: { loadSeriesCategories: vi.fn(), loadAllSeries: vi.fn(), loadSeries: vi.fn(), loadSeriesInfo: vi.fn(), getCatalogFill: vi.fn((): { done: number; total: number } | null => null), onCatalogFillChanged: vi.fn() },
     watchlistState,
     storageMock: {
       getResumeList: vi.fn(() => [] as unknown[]),
@@ -55,6 +55,7 @@ beforeEach(() => {
   storageMock.getResumeList.mockReturnValue([]);
   storageMock.getResume.mockReturnValue(null);
   catalogMock.getCatalogFill.mockReturnValue(null);
+  catalogMock.loadAllSeries.mockResolvedValue([]);
   watchlistState.entries = [];
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -304,11 +305,11 @@ describe('Series browse + grid', () => {
   });
 
   it('drops a category prefix the provider puts on every category', async () => {
-    const cats = [{ id: '1', name: 'Serie ∤ Alpha' }, { id: '2', name: 'Serie ∤ Bravo Max' }];
+    const cats = [{ id: '1', name: 'Serie ∤ Alpha' }, { id: '2', name: 'Serie ∤ Bravo Delta' }];
     catalogMock.loadSeriesInfo.mockResolvedValue(null);
     await openWith(cats, [series('s1', 'Series One')]);
     const titles = Array.from(container.querySelectorAll('.catalog-rail-title')).map((el) => el.textContent);
-    expect(titles).toEqual(['Alpha', 'Bravo Max']);
+    expect(titles).toEqual(['Alpha', 'Bravo Delta']);
   });
 
   it('shows a Continue rail from the episode resume list and resumes an episode directly', async () => {
@@ -851,6 +852,7 @@ describe('Series catalog fill indicator', () => {
     expect(container.querySelector('.catalog-fill')?.textContent).toBe('Loading catalog… 12/35');
     expect(container.querySelector('.catalog-tile')).not.toBeNull();
     catalogMock.getCatalogFill.mockReturnValue(null);
+  catalogMock.loadAllSeries.mockResolvedValue([]);
     fillChanged('x1', 'series_all');
     expect(container.querySelector('.catalog-fill')).toBeNull();
   });
@@ -951,5 +953,33 @@ describe('Series related button', () => {
     expect(view.focusScope.focusKey).toContain('rs:s3');
     view.handleAction('up');
     expect(view.focusScope.focusKey).toContain('related');
+  });
+});
+
+describe('Series collections', () => {
+  it('merges genre duplicates, groups streaming services, and builds Top rated', async () => {
+    const cats = [
+      { id: '1', name: 'Drama' }, { id: '2', name: 'DRAMA 4K' }, { id: '3', name: 'Netflix | Series' },
+      { id: '4', name: 'Crunchyroll' },
+    ];
+    const items: Record<string, ReturnType<typeof series>[]> = {
+      '1': [series('s1', 'Alpha', '1')], '2': [series('s1', 'Alpha', '2'), series('s2', 'Bravo', '2')],
+      '3': [series('s3', 'Charlie', '3')], '4': [series('s4', 'Delta', '4')],
+    };
+    catalogMock.loadSeriesCategories.mockResolvedValue(cats);
+    catalogMock.loadSeries.mockImplementation((_a: unknown, id: string) => Promise.resolve(items[id]));
+    catalogMock.loadAllSeries.mockResolvedValue(
+      Object.values(items).flat().map((s) => ({ ...s, rating: '9' })));
+    const view = new Series(container, { onRevealTabBar: vi.fn(), onBack: vi.fn(), onPlayVod: vi.fn() });
+    Focus.setBase(() => view.focusScope);
+    await view.open(account);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const titles = Array.from(container.querySelectorAll('.catalog-rail-track'))
+      .map((track) => track.previousElementSibling?.textContent);
+    expect(titles).toEqual(['Top rated', 'Netflix', 'Crunchyroll', 'Drama']);
+    const drama = container.querySelector('[data-rail-key="cat:g:drama"]')!;
+    expect(Array.from(drama.querySelectorAll('.catalog-tile-name')).map((el) => el.textContent))
+      .toEqual(['Alpha', 'Bravo']);
+    view.deactivate();
   });
 });
