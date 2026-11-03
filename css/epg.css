@@ -670,6 +670,10 @@
   white-space: nowrap;
 }
 
+.epg-programme-detail .epg-prog-desc {
+  margin-top: 4px;
+}
+
 .epg-no-data {
   padding: 40px;
   text-align: center;

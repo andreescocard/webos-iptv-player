@@ -110,7 +110,7 @@ test('opens a category suggestion, sorts its movies, and restores focus after de
 });
 
 test('keeps small category catalogs reachable and does not invent a rating for unrated movies', async ({ page }) => {
-  await expect(page.locator('#view-movies .catalog-category-grid .catalog-cat')).toHaveCount(4);
+  await expect(page.locator('#view-movies .catalog-category-grid .catalog-cat')).toHaveCount(5);
   await select(page, '#view-movies .catalog-cat[data-category-id="3"]');
   const grid = page.locator('#view-movies .catalog-grid');
   await expect(grid.locator('.catalog-category-feature')).toHaveCount(0);
@@ -219,4 +219,17 @@ test('reaches related movies below a detail with the D-pad, and Back returns to 
   await expect(detail.locator('.detail-title')).toHaveText('Zulu');
   await page.keyboard.press('Escape');
   await expect(page.locator('#view-movies .catalog-grid [data-item-id="10"]')).toHaveClass(/focused/);
+});
+
+test('leads with the Top rated rail, then genre rails, and lists a Discover section of tiles with counts', async ({ page }) => {
+  const titles = page.locator('#view-movies .catalog-rail-track');
+  await expect(titles.first().locator('xpath=preceding-sibling::h2[1]')).toHaveText('Top rated');
+  const heads = await page.locator('#view-movies .catalog-rail-track')
+    .evaluateAll((tracks) => tracks.map((t) => t.previousElementSibling?.textContent));
+  expect(heads.slice(0, 3)).toEqual(['Top rated', 'Watchlist', 'Drama']);
+  const top = page.locator('#view-movies .catalog-cat[data-category-id="v:top"]');
+  await expect(top.locator('.catalog-cat-name')).toHaveText('Top rated');
+  await expect(top.locator('.catalog-cat-count')).toHaveText('3 movies');
+  await expect(page.locator('#view-movies .catalog-category-grid').first().locator('xpath=preceding-sibling::h2[1]'))
+    .toHaveText('Discover');
 });

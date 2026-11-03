@@ -660,8 +660,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
     });
     this.railGroups = this.buildRailGroups();
     if (!this.browseRendered) return;
-    if (this.mode === 'browse') this.renderBrowse(false);
-    else this.paintBrowse();
+    this.paintBrowse();
   }
 
   // The active mode's layer; hidden layers keep their DOM but never take focus.
