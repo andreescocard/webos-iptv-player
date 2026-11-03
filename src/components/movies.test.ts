@@ -1677,6 +1677,23 @@ describe('Movies collections', () => {
       .toEqual(['Alpha', 'Bravo', 'Charlie']);
   });
 
+  it('lists a title copied under another id once in its genre rail, grid, and count', async () => {
+    const copies = [
+      vod('10', 'Alpha', '1'), vod('11', 'Bravo', '1'), vod('20', 'Alpha 4K', '2'), vod('21', 'Alpha (2009)', '1'),
+    ];
+    catalogMock.loadVodStreams.mockImplementation((_account: unknown, id: string) =>
+      Promise.resolve(copies.filter((item) => item.categoryId === id)));
+    catalogMock.loadAllVodStreams.mockResolvedValue(copies);
+    const { view } = await open();
+    await settle();
+    const action = container.querySelector('[data-rail-key="cat:g:action"]')!;
+    expect(Array.from(action.querySelectorAll('.catalog-tile-name')).map((el) => el.textContent))
+      .toEqual(['Alpha', 'Bravo']);
+    expect(container.querySelector('.catalog-cat[data-category-id="g:action"] .catalog-cat-count')?.textContent)
+      .toBe('2 movies');
+    view.deactivate();
+  });
+
   it('groups the tiles into streaming, genre, and other sections with counts', async () => {
     catalogMock.loadVodStreams.mockImplementation(byCategory);
     catalogMock.loadAllVodStreams.mockResolvedValue([

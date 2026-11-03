@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nameYear, newReleases, recentlyAdded, titleYear, topRated, type SmartTitle } from './smart-collections';
+import { nameYear, newReleases, recentlyAdded, titleYear, topRated, uniqueTitles, type SmartTitle } from './smart-collections';
 
 function title(name: string, extra: Partial<SmartTitle> = {}): SmartTitle {
   return { name, rating: '', ...extra };
@@ -58,5 +58,25 @@ describe('newReleases', () => {
 
   it('is empty when no title has a recent year', () => {
     expect(newReleases([title('A', { year: 2001 }), title('B')], 10, now)).toEqual([]);
+  });
+});
+
+describe('uniqueTitles', () => {
+  it('keeps one of each title across case, accents, quality, and year tags', () => {
+    const items = [
+      title('Alpha', { year: 2009 }), title('ALPHA [4K]'), title('Álpha (2009) FHD'),
+      title('Bravo'), title('Alpha HDR', { year: 2009 }),
+    ];
+    expect(uniqueTitles(items).map((item) => item.name)).toEqual(['Alpha', 'Bravo']);
+  });
+
+  it('keeps same-named titles whose years differ', () => {
+    const items = [title('Charlie (1984)'), title('Charlie (2021)'), title('Charlie [2021]')];
+    expect(uniqueTitles(items).map((item) => item.name)).toEqual(['Charlie (1984)', 'Charlie (2021)']);
+  });
+
+  it('shows a title once in the smart lists, at its best rank', () => {
+    const items = [title('Delta', { rating: '7.5' }), title('Delta 4K', { rating: '9' }), title('Echo', { rating: '8' })];
+    expect(topRated(items, 10).map((item) => item.name)).toEqual(['Delta 4K', 'Echo']);
   });
 });
