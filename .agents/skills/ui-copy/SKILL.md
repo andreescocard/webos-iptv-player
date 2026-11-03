@@ -95,6 +95,11 @@ sweep every locale, both READMEs, and the setup page for the old term.
   agreement around it (es/fr/it/pt adjectives and verbs).
 - One neutral variant per language (`es` uses *tú*; `pt-BR`, not
   `pt`).
+- A new locale is `src/i18n/<locale>.ts` exporting
+  `<LOCALE>_MESSAGES` (`pt-BR` → `PT_BR_MESSAGES`), an entry in
+  `LOCALES` in `src/i18n/index.ts`, and one in `ALL_CATALOGS` in
+  `src/i18n/catalogs.ts`. The build ships each non-English catalog as
+  `js/locales/<locale>.js`, loaded only when that language is in use.
 
 ### Simplified Chinese
 
