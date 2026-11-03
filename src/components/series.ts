@@ -5,12 +5,14 @@ import { StorageService } from '../services/storage-service';
 import { loadSeriesCategories, loadSeries, loadSeriesInfo } from '../services/xtream-catalog';
 import { xtreamEpisodeUrl, type XtreamCredentials } from '../utils/xtream-url';
 import { CatalogView, buildFacts, catalogButton, catalogFacts, type CatalogAction, type CatalogHandlers, type HeroMeta, type TrailerTarget } from './catalog-view';
-import { PLAY_ICON, watchlistIcon } from './icons';
+import { PLAY_ICON, TAB_LIVE_ICON, watchlistIcon } from './icons';
 import { showToast } from './toast';
 import { t, tp } from '../i18n';
 import { VirtualList } from '../utils/virtual-list';
 import { lazySrc } from '../utils/lazy-images';
 import { cleanEpisodeTitle, episodeLine, parseEpisodeName } from '../utils/episode-name';
+import { relatedTitles } from '../utils/movie-discovery';
+import { CONFIG } from '../config';
 
 const EPISODE_GAP = 16;
 const EPISODE_NO_PLOT_ESTIMATE = 138;
@@ -57,6 +59,11 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
   // A held key's reveal writes the list's offset without a smooth scroll.
   private instantEpisodeScroll = false;
   private heroPlayRequest = 0;
+  private related: SeriesItem[] = [];
+  // Related Series replaces the episode list while it is on.
+  private showRelated = false;
+  // Details a related series was opened from, for Back.
+  private detailHistory: SeriesItem[] = [];
 
   constructor(container: HTMLElement, handlers: CatalogHandlers) {
     super(container, handlers);
@@ -161,6 +168,16 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     this.detailController?.abort();
     this.detailController = null;
     this.currentSeries = null;
+    this.related = [];
+    this.showRelated = false;
+    this.detailHistory = [];
+  }
+
+  protected detailBack(): boolean {
+    const previous = this.detailHistory.pop();
+    if (!previous) return false;
+    void this.openDetail(previous, false);
+    return true;
   }
   protected onRequestSessionReset(): void {
     this.detailController?.abort();
@@ -216,6 +233,12 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     if (el.dataset.action === 'watchlist') { this.toggleWatchlist(); return true; }
     if (el.dataset.resumeEpisode !== undefined) { this.playResume(el.dataset.resumeEpisode); return true; }
     if (el.dataset.season !== undefined) { this.selectSeason(Number(el.dataset.season)); return true; }
+    if (el.dataset.action === 'related') { this.toggleRelated(); return true; }
+    if (el.dataset.relatedSeries !== undefined) {
+      const series = this.related.find((item) => item.seriesId === el.dataset.relatedSeries);
+      if (series) void this.openDetail(series, true);
+      return true;
+    }
     if (el.dataset.episodeId !== undefined) { this.playEpisode(el.dataset.episodeId); return true; }
     return false;
   }
@@ -238,9 +261,11 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     this.renderDetail();
   }
 
-  protected async openDetail(series: SeriesItem): Promise<void> {
+  protected async openDetail(series: SeriesItem, fromRelated = false): Promise<void> {
     const account = this.account;
     if (!account || !this.requestSignal) return;
+    if (fromRelated && this.currentSeries) this.detailHistory.push(this.currentSeries);
+    else if (this.mode !== 'detail') this.detailHistory = [];
     this.detailController?.abort();
     this.detailController = new AbortController();
     const signal = this.detailController.signal;
@@ -253,7 +278,10 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     this.episodeSource = null;
     this.episodeVirtualizer.setScrollOffset(0);
     this.detailLoading = true;
+    this.related = [];
+    this.showRelated = false;
     this.renderDetail();
+    void this.loadRelated(series, signal);
     try {
       this.currentInfo = await loadSeriesInfo(account, series.seriesId, signal);
     } catch (err) {
@@ -267,7 +295,40 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     }
   }
 
+  private async loadRelated(series: SeriesItem, signal: AbortSignal): Promise<void> {
+    if (!series.categoryId) return;
+    let items: SeriesItem[];
+    try {
+      items = await this.categoryItems(series.categoryId, signal);
+    } catch (err) {
+      this.requestFailed('Related series load', err, signal);
+      return;
+    }
+    if (signal.aborted || this.currentSeries !== series) return;
+    this.related = relatedTitles(series.seriesId, items, CONFIG.XTREAM.RAIL_ITEMS, (item) => item.seriesId);
+    if (this.mode === 'detail' && this.related.length) this.renderDetail();
+  }
+
+  // Related Series swaps the episode list for a rail; again (or a season) swaps back.
+  private toggleRelated(): void {
+    this.showRelated = !this.showRelated;
+    this.episodeVirtualizer.setScrollOffset(0);
+    this.renderDetail();
+  }
+
+  private relatedTile(series: SeriesItem): Safe {
+    return html`
+      <div class="catalog-tile" data-focusable data-key="rs:${series.seriesId}"
+           data-related-series="${series.seriesId}" data-category-id="${series.categoryId}">
+        <div class="catalog-poster-wrap">${this.posterCell(series.name, series.poster)}${
+          this.itemLockBadge(series.categoryId, series.seriesId)}</div>
+        <div class="catalog-tile-name">${series.name}</div>
+      </div>
+    `;
+  }
+
   private selectSeason(season: number): void {
+    this.showRelated = false;
     this.selectedSeason = season;
     this.episodeFocusIndex = 0;
     this.episodeSource = null;
@@ -453,7 +514,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     const a = this.account;
     if (!series || !a) return;
     const info = this.currentInfo;
-    const episodes = info ? (info.episodesBySeason[this.selectedSeason] ?? []) : [];
+    const episodes = info && !this.showRelated ? (info.episodesBySeason[this.selectedSeason] ?? []) : [];
     const poster = info?.poster || series.poster;
     const year = info?.year ? String(info.year) : '';
     const facts = buildFacts({
@@ -476,6 +537,12 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
       label: t(watchlisted ? 'catalog.removeWatchlist' : 'catalog.addWatchlist'),
       icon: watchlistIcon(watchlisted),
     }];
+    const allActions = actions.concat(this.extraDetailActions());
+    if (this.related.length) {
+      allActions.push({
+        id: 'related', label: t('catalog.relatedSeries'), icon: TAB_LIVE_ICON, primary: this.showRelated,
+      });
+    }
     const previousScroller = this.layer('detail').querySelector<HTMLElement>('.series-detail');
     const previousEpisodes = this.layer('detail').querySelector<HTMLElement>('.series-episodes');
     this.episodeVirtualizer.setLeadingSize(
@@ -504,7 +571,7 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
             ${info?.cast ? html`<div class="detail-cast"><span class="detail-label">${t('catalog.cast')}</span> ${info.cast}</div>` : ''}
             ${info?.director ? html`<div class="detail-cast"><span class="detail-label">${t('catalog.director')}</span> ${info.director}</div>` : ''}
             <div class="detail-actions">
-              ${actions.concat(this.extraDetailActions()).map((action) => catalogButton(action, 'detail'))}
+              ${allActions.map((action) => catalogButton(action, 'detail'))}
             </div>
             ${this.detailLoading
               ? html`<p class="catalog-hint">${t('common.loading')}</p>`
@@ -512,17 +579,21 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
                 ? html`<p class="catalog-hint">${t('catalog.loadEpisodesFailed')}</p>`
                 : info.seasons.length === 0
                   ? html`<p class="catalog-hint">${t('catalog.noEpisodes')}</p>`
-                  : html`
-                  <div class="series-seasons">
-                    ${info.seasons.map((n) => html`
-                      <button class="series-season-btn ${n === this.selectedSeason ? 'active' : ''}"
-                              data-focusable data-key="season:${n}" data-season="${n}">${t('catalog.season', { number: n })}</button>
-                    `)}
-                  </div>
-                `}
+                  : ''}
+            ${!this.detailLoading && info && info.seasons.length > 0 ? html`
+              <div class="series-seasons">
+                ${info.seasons.map((n) => html`
+                  <button class="series-season-btn ${!this.showRelated && n === this.selectedSeason ? 'active' : ''}"
+                          data-focusable data-key="season:${n}" data-season="${n}">${t('catalog.season', { number: n })}</button>
+                `)}
+              </div>
+            ` : ''}
           </div>
         </div>
-        ${info && info.seasons.length > 0 ? html`
+        ${this.showRelated && this.related.length
+          ? this.rail('related', t('catalog.relatedSeries'), this.related.map((item) => this.relatedTile(item)))
+          : ''}
+        ${!this.showRelated && info && info.seasons.length > 0 ? html`
           <div class="series-episodes">
             ${episodes.length === 0
               ? html`<p class="catalog-hint">${t('catalog.noSeasonEpisodes')}</p>`
@@ -615,6 +686,13 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
   protected moveExtraFocus(action: Action): boolean {
     if (this.mode !== 'detail') return false;
     if (this.moveHeadFocus(action)) return true;
+    if (action === 'up' && this.current()?.closest('[data-rail-key="related"]')) {
+      const button = this.selectedSeasonButton()
+        ?? this.layer('detail').querySelector<HTMLElement>('[data-action="related"]');
+      if (!button) return false;
+      this.place(button, 'key');
+      return true;
+    }
     if (action !== 'up' && action !== 'down') return false;
     const key = this.focusedKey();
     const current = key === null ? -1 : this.episodeIndexOf(key);
@@ -654,6 +732,13 @@ export class Series extends CatalogView<SeriesCategory, SeriesItem> {
     if (action === 'left' || action === 'right') {
       const next = items[items.indexOf(el) + (action === 'left' ? -1 : 1)];
       if (next) this.place(next, 'key');
+      return true;
+    }
+    // With Related Series on, the rail sits where the episodes did.
+    if (action === 'down' && this.showRelated && (!inActions || !this.selectedSeasonButton())) {
+      const first = this.layer('detail').querySelector<HTMLElement>('[data-rail-key="related"] [data-focusable]');
+      if (!first) return false;
+      this.place(first, 'key');
       return true;
     }
     if (action === 'down' && inActions) {

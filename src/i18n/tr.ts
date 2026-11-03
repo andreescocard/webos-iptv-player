@@ -101,6 +101,7 @@ export const TR_MESSAGES = {
   'epg.catchupUnavailable': 'Bu program Geri İzle ile izlenemiyor.',
   'catalog.continueWatching': 'İzlemeye Devam Et',
   'catalog.relatedMovies': 'Benzer filmler',
+  'catalog.relatedSeries': 'Benzer diziler',
   'catalog.allCategories': 'Tüm Kategoriler',
   'catalog.seeAll': 'Tümünü gör',
   'catalog.sortBy': 'Sıralama ölçütü',

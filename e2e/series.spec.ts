@@ -361,3 +361,35 @@ test('Series detail D-pad keeps rows: actions across, selected season below, bac
   await press('ArrowRight', 'trailer');
   await press('ArrowDown', 'season:4');
 });
+
+test('Related Series, right of Trailer, swaps episodes for a rail the D-pad walks', async ({ page }) => {
+  await seedSeries(page);
+  await page.goto('/');
+  await expect(page.locator('#view-channels')).toBeVisible();
+  await enterTab(page, 'series');
+  await page.locator('.catalog-tile[data-item-id="1"]')
+    .evaluate((el) => el.dispatchEvent(new CustomEvent('nav:hover', { bubbles: true })));
+  await page.keyboard.press('Enter');
+  const detail = page.locator('#view-series .series-detail');
+  const button = detail.locator('[data-action="related"]');
+  await expect(button).toHaveText('Related Series');
+  await expect(detail.locator('.detail-actions [data-action]').last()).toHaveAttribute('data-action', 'related');
+  await expect(detail.locator('[data-action="watchlist"]')).toHaveClass(/focused/);
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(button).toHaveClass(/focused/);
+  await page.keyboard.press('Enter');
+  await expect(detail.locator('.episode-row')).toHaveCount(0);
+  const tile = detail.locator('[data-rail-key="related"] [data-related-series="2"]');
+  await expect(tile).toContainText('Series Two');
+  await page.keyboard.press('ArrowDown');
+  await expect(detail.locator('[data-season="1"]')).toHaveClass(/focused/);
+  await page.keyboard.press('ArrowDown');
+  await expect(tile).toHaveClass(/focused/);
+  await expect(page.locator('.focused')).toHaveCount(1);
+  await page.keyboard.press('Enter');
+  await expect(detail.locator('.detail-title')).toHaveText('Series Two');
+  await expect(detail.locator('.episode-row[data-episode-id="10"]')).toBeVisible();
+  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 461, bubbles: true })));
+  await expect(detail.locator('.detail-title')).toHaveText('Series One');
+});

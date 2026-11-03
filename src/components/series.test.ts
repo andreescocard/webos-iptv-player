@@ -854,3 +854,101 @@ describe('Series catalog fill indicator', () => {
     expect(container.querySelector('.catalog-fill')).toBeNull();
   });
 });
+
+describe('Series related button', () => {
+  const ep = (id: string, n: number) => ({
+    id, title: `Episode ${String(n)}`, season: 1, episode: n, containerExtension: 'mkv',
+    durationSecs: 600, plot: '', poster: '', subtitles: [],
+  });
+  const info = (seasons: number[]) => ({
+    plot: '', cast: '', director: '', genre: '', releaseDate: '', episodeRunTimeMins: 0,
+    poster: '', backdrop: '', rating: '', imdbId: '', tmdbId: '', year: 0,
+    seasons, episodesBySeason: seasons.length ? { 1: [ep('e1', 1)] } : {},
+  });
+  const settle = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); };
+  const hover = (selector: string) => container.querySelector(selector)!
+    .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+  const title = () => container.querySelector('.series-detail .detail-title')?.textContent;
+  const items = [series('s1', 'Series One'), series('s2', 'Series Two'), { ...series('s3', 'Series Three'), rating: '9' }];
+
+  async function openDetail() {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    catalogMock.loadSeriesInfo.mockResolvedValue(info([1]));
+    const opened = await openWith([{ id: '1', name: 'Cat A' }], items);
+    hover('.catalog-tile[data-item-id="s1"]');
+    opened.view.handleAction('select');
+    await settle();
+    return opened;
+  }
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('puts Related Series right of Trailer, swapping the episodes for a rail', async () => {
+    const { view } = await openDetail();
+    const actions = Array.from(container.querySelectorAll('.detail-actions [data-action]'))
+      .map((el) => el.getAttribute('data-action'));
+    expect(actions).toEqual(['watchlist', 'trailer', 'related']);
+    expect(container.querySelector('[data-action="related"]')?.textContent).toContain('Related Series');
+    expect(container.querySelector('[data-rail-key="related"]')).toBeNull();
+    hover('[data-action="related"]');
+    view.handleAction('select');
+    expect(container.querySelector('.series-episodes')).toBeNull();
+    expect(container.querySelector('[data-action="related"]')?.classList.contains('detail-btn-primary')).toBe(true);
+    expect(container.querySelector('[data-season="1"]')?.classList.contains('active')).toBe(false);
+    expect(Array.from(container.querySelectorAll('[data-rail-key="related"] [data-related-series]'))
+      .map((el) => el.getAttribute('data-related-series'))).toEqual(['s3', 's2']);
+    view.handleAction('down');
+    expect(view.focusScope.focusKey).toContain('season:1');
+    view.handleAction('down');
+    expect(view.focusScope.focusKey).toContain('rs:s3');
+    view.handleAction('right');
+    expect(view.focusScope.focusKey).toContain('rs:s2');
+    view.handleAction('up');
+    expect(view.focusScope.focusKey).toContain('season:1');
+    view.handleAction('select');
+    expect(container.querySelector('.series-episodes')).not.toBeNull();
+    expect(container.querySelector('[data-rail-key="related"]')).toBeNull();
+  });
+
+  it('toggles back to the episodes from the same button', async () => {
+    const { view } = await openDetail();
+    hover('[data-action="related"]');
+    view.handleAction('select');
+    expect(container.querySelector('.series-episodes')).toBeNull();
+    view.handleAction('select');
+    expect(container.querySelector('.series-episodes')).not.toBeNull();
+    expect(view.focusScope.focusKey).toContain('related');
+  });
+
+  it('opens a related series, and Back returns to the series it came from', async () => {
+    const { view } = await openDetail();
+    hover('[data-action="related"]');
+    view.handleAction('select');
+    hover('[data-related-series="s2"]');
+    view.handleAction('select');
+    await settle();
+    expect(title()).toBe('Series Two');
+    expect(container.querySelector('.series-episodes')).not.toBeNull();
+    view.handleAction('back');
+    await settle();
+    expect(title()).toBe('Series One');
+    view.handleAction('back');
+    expect(container.querySelector('.catalog-layer-detail')?.classList.contains('catalog-layer-hidden')).toBe(true);
+  });
+
+  it('offers the button when the series has no seasons, and Down reaches the rail', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    catalogMock.loadSeriesInfo.mockResolvedValue(info([]));
+    const { view } = await openWith([{ id: '1', name: 'Cat A' }], items);
+    hover('.catalog-tile[data-item-id="s1"]');
+    view.handleAction('select');
+    await settle();
+    expect(container.querySelector('.series-detail')?.textContent).toContain('No episodes');
+    expect(container.querySelector('.series-seasons')).toBeNull();
+    hover('[data-action="related"]');
+    view.handleAction('select');
+    view.handleAction('down');
+    expect(view.focusScope.focusKey).toContain('rs:s3');
+    view.handleAction('up');
+    expect(view.focusScope.focusKey).toContain('related');
+  });
+});

@@ -101,6 +101,7 @@ export const ZH_CN_MESSAGES = {
   'epg.catchupUnavailable': '此节目暂不支持回看。',
   'catalog.continueWatching': '继续观看',
   'catalog.relatedMovies': '相关电影',
+  'catalog.relatedSeries': '相关剧集',
   'catalog.allCategories': '全部分类',
   'catalog.seeAll': '查看全部',
   'catalog.sortBy': '排序方式',

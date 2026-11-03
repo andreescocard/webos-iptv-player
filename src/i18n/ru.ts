@@ -107,6 +107,7 @@ export const RU_MESSAGES = {
   'epg.catchupUnavailable': 'Эта передача недоступна в архиве.',
   'catalog.continueWatching': 'Продолжить просмотр',
   'catalog.relatedMovies': 'Похожие фильмы',
+  'catalog.relatedSeries': 'Похожие сериалы',
   'catalog.allCategories': 'Все категории',
   'catalog.seeAll': 'Показать все',
   'catalog.sortBy': 'Сортировать по',

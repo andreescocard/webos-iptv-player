@@ -31,56 +31,78 @@ export function sortMovies(items: VodItem[], order: MovieSort): VodItem[] {
   });
 }
 
-export function randomGoodMovie(items: VodItem[], previousId?: string): VodItem | null {
+interface RatedTitle { rating: string }
+
+function randomGood<T extends RatedTitle>(items: T[], idOf: (item: T) => string, previousId?: string): T | null {
   let eligible = 0;
   let alternatives = 0;
   for (const item of items) {
     const rating = movieRating(item.rating);
     if (rating === null || rating < 7) continue;
     eligible++;
-    if (item.streamId !== previousId) alternatives++;
+    if (idOf(item) !== previousId) alternatives++;
   }
   if (eligible === 0) return null;
   const avoidPrevious = eligible > 1 && alternatives > 0;
   let selected = Math.floor(Math.random() * (avoidPrevious ? alternatives : eligible));
   for (const item of items) {
     const rating = movieRating(item.rating);
-    if (rating === null || rating < 7 || (avoidPrevious && item.streamId === previousId)) continue;
+    if (rating === null || rating < 7 || (avoidPrevious && idOf(item) === previousId)) continue;
     if (selected-- === 0) return item;
   }
   return null;
 }
 
-// Up to `count` distinct good movies in random order; the previous stream
-// comes last, only when nothing else is left.
-export function randomGoodMovies(items: VodItem[], count: number, previousId?: string): VodItem[] {
-  const picks: VodItem[] = [];
+// Up to `count` distinct good titles in random order; the previous one comes
+// last, only when nothing else is left.
+function randomGoodTitles<T extends RatedTitle>(
+  items: T[], count: number, idOf: (item: T) => string, previousId?: string,
+): T[] {
+  const picks: T[] = [];
   let pool = items;
   while (picks.length < count) {
-    const item = randomGoodMovie(pool, previousId);
+    const item = randomGood(pool, idOf, previousId);
     if (!item) break;
     picks.push(item);
-    pool = pool.filter((other) => other.streamId !== item.streamId);
+    const id = idOf(item);
+    pool = pool.filter((other) => idOf(other) !== id);
   }
   return picks;
 }
 
-// Other titles from the movie's category: good-rated ones in random order
+const streamIdOf = (item: VodItem): string => item.streamId;
+
+export function randomGoodMovie(items: VodItem[], previousId?: string): VodItem | null {
+  return randomGood(items, streamIdOf, previousId);
+}
+
+export function randomGoodMovies(items: VodItem[], count: number, previousId?: string): VodItem[] {
+  return randomGoodTitles(items, count, streamIdOf, previousId);
+}
+
+// Other titles from the same category: good-rated ones in random order
 // first, then the rest in catalog order.
-export function relatedMovies(movie: VodItem, items: VodItem[], limit: number): VodItem[] {
-  const seen = new Set<string>([movie.streamId]);
+export function relatedTitles<T extends RatedTitle>(
+  currentId: string, items: T[], limit: number, idOf: (item: T) => string,
+): T[] {
+  const seen = new Set<string>([currentId]);
   const pool = items.filter((item) => {
-    if (seen.has(item.streamId)) return false;
-    seen.add(item.streamId);
+    const id = idOf(item);
+    if (seen.has(id)) return false;
+    seen.add(id);
     return true;
   });
-  const picks = randomGoodMovies(pool, limit);
+  const picks = randomGoodTitles(pool, limit, idOf);
   const picked = new Set(picks);
   for (const item of pool) {
     if (picks.length >= limit) break;
     if (!picked.has(item)) picks.push(item);
   }
   return picks;
+}
+
+export function relatedMovies(movie: VodItem, items: VodItem[], limit: number): VodItem[] {
+  return relatedTitles(movie.streamId, items, limit, streamIdOf);
 }
 
 // Only explicit service labels: bare "prime", missing plus signs, and partial

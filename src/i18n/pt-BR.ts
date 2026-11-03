@@ -103,6 +103,7 @@ export const PT_BR_MESSAGES = {
   'epg.catchupUnavailable': 'Este programa não está disponível no replay.',
   'catalog.continueWatching': 'Continuar assistindo',
   'catalog.relatedMovies': 'Filmes relacionados',
+  'catalog.relatedSeries': 'Séries relacionadas',
   'catalog.allCategories': 'Todas as categorias',
   'catalog.seeAll': 'Ver tudo',
   'catalog.sortBy': 'Ordenar por',
