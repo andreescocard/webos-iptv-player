@@ -355,6 +355,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
   protected abstract continueRail(): Safe | '';
   // The Watchlist rail (or '' when it is empty).
   protected abstract watchlistRail(): Safe | '';
+  // Whether the Watchlist rail sits right under the hero, above Continue.
+  protected readonly watchlistLeads: boolean = false;
   // A tile id that isn't in a loaded category (Continue/Watchlist); default none.
   protected fallbackItem(_id: string): I | null { return null; }
   // Hero when no rail item exists (Movies falls back to a resumed item); default none.
@@ -1913,9 +1915,10 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
               <div class="catalog-rails-spacer catalog-hero-body" data-key="hero-body"
                    data-rail-key="hero">${this.heroText(html`${this.carouselDots()}${fillNote}`)}</div>
               <div class="catalog-rails-body" data-key="rails-body">
+                ${this.watchlistLeads ? watchlistRail : ''}
                 ${continueRail}
                 ${this.railGroups.filter((r) => this.isSmartRail(r)).map((r) => this.categoryRail(r))}
-                ${watchlistRail}
+                ${this.watchlistLeads ? '' : watchlistRail}
                 ${this.railGroups.filter((r) => !this.isSmartRail(r)).map((r) => this.categoryRail(r))}
                 ${categorySections.map((section) => html`
                   <div class="catalog-rail" data-key="rail:${section.key}"

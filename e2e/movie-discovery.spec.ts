@@ -221,12 +221,10 @@ test('reaches related movies below a detail with the D-pad, and Back returns to 
   await expect(page.locator('#view-movies .catalog-grid [data-item-id="10"]')).toHaveClass(/focused/);
 });
 
-test('leads with the Top rated rail, then genre rails, and lists a Discover section of tiles with counts', async ({ page }) => {
-  const titles = page.locator('#view-movies .catalog-rail-track');
-  await expect(titles.first().locator('xpath=preceding-sibling::h2[1]')).toHaveText('Top rated');
-  const heads = await page.locator('#view-movies .catalog-rail-track')
-    .evaluateAll((tracks) => tracks.map((t) => t.previousElementSibling?.textContent));
-  expect(heads.slice(0, 3)).toEqual(['Top rated', 'Watchlist', 'Drama']);
+test('leads with the Watchlist, then Top rated and genre rails, and lists a Discover section of tiles with counts', async ({ page }) => {
+  await expect.poll(() => page.locator('#view-movies .catalog-rail-track')
+    .evaluateAll((tracks) => tracks.slice(0, 3).map((t) => t.previousElementSibling?.textContent)))
+    .toEqual(['Watchlist', 'Top rated', 'Drama']);
   const top = page.locator('#view-movies .catalog-cat[data-category-id="v:top"]');
   await expect(top.locator('.catalog-cat-name')).toHaveText('Top rated');
   await expect(top.locator('.catalog-cat-count')).toHaveText('3 movies');

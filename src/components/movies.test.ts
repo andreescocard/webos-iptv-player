@@ -451,6 +451,55 @@ describe('Movies browse + grid', () => {
     expect(container.querySelector('.movies-detail')?.textContent).toContain('Saved Movie');
   });
 
+  describe('Watchlist rail', () => {
+    const saved = (itemId: string, addedAt: number): WatchlistEntry => ({
+      accountId: 'x1', kind: 'vod', itemId, name: `Saved ${itemId}`, poster: '',
+      rating: '', categoryId: '9', containerExtension: 'mp4', addedAt,
+    });
+    const watchedIds = (ids: string[]) => storageMock.getResume.mockImplementation(
+      ((_a: string, _k: string, itemId: string) => (ids.includes(itemId)
+        ? { accountId: 'x1', kind: 'vod', itemId, name: '', poster: '', ext: 'mp4',
+          position: 600, duration: 600, updatedAt: 1, watched: true }
+        : null)) as never);
+
+    it('sits right under the hero, above Continue Watching', async () => {
+      watchlistState.entries = [saved('42', 1)];
+      storageMock.getResumeList.mockReturnValue([{ accountId: 'x1', kind: 'vod', itemId: '10',
+        name: 'Movie One', poster: '', ext: 'mp4', position: 60, duration: 120, updatedAt: 1 }]);
+      await openWith();
+      const rails = Array.from(container.querySelectorAll<HTMLElement>('.catalog-rails-body > [data-rail-key]'))
+        .map((el) => el.dataset.railKey);
+      expect(rails.slice(0, 2)).toEqual(['watchlist', 'continue']);
+    });
+
+    it('moves watched movies to the end and marks them watched', async () => {
+      watchlistState.entries = [saved('41', 3), saved('42', 2), saved('43', 1)];
+      watchedIds(['41']);
+      await openWith();
+      const tiles = Array.from(container.querySelectorAll<HTMLElement>('[data-watchlist-item]'));
+      expect(tiles.map((el) => el.dataset.watchlistItem)).toEqual(['42', '43', '41']);
+      expect(tiles[2].classList.contains('is-watched')).toBe(true);
+      expect(tiles[2].querySelector('.catalog-tile-watched')?.textContent).toContain('Watched');
+      expect(tiles[0].querySelector('.catalog-tile-watched')).toBeNull();
+    });
+
+    it('offers Play, not Resume, for a watched movie', async () => {
+      watchlistState.entries = [saved('42', 1)];
+      watchedIds(['42']);
+      catalogMock.loadVodInfo.mockResolvedValue({
+        plot: '', cast: '', director: '', genre: '', releaseDate: '', durationSecs: 0,
+        poster: '', imdbId: '', tmdbId: '', year: 0,
+      });
+      const { view } = await openWith();
+      container.querySelector('[data-watchlist-item="42"]')!
+        .dispatchEvent(new CustomEvent('nav:hover', { bubbles: true }));
+      view.handleAction('select');
+      await Promise.resolve(); await Promise.resolve();
+      expect(container.querySelector('[data-action="resume"]')).toBeNull();
+      expect(container.querySelector('[data-action="play"]')).not.toBeNull();
+    });
+  });
+
   it('queues only the movies after one launched from the Watchlist rail', async () => {
     watchlistState.entries = [
       {

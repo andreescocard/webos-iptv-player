@@ -1,11 +1,11 @@
-import type { Action, PlaylistEntry, VodCategory, VodItem, VodInfo, ResumeKind, WatchlistEntry, VodQueueItem } from '../types';
-import { html, Safe } from '../utils/dom';
+import type { Action, PlaylistEntry, VodCategory, VodItem, VodInfo, ResumeEntry, ResumeKind, WatchlistEntry, VodQueueItem } from '../types';
+import { html, raw, Safe } from '../utils/dom';
 import { morph } from '../utils/morph';
 import { StorageService } from '../services/storage-service';
 import { loadAllVodStreams, loadVodCategories, loadVodStreams, loadVodInfo } from '../services/xtream-catalog';
 import { xtreamVodUrl } from '../utils/xtream-url';
 import { CatalogView, buildFacts, catalogButton, catalogFacts, type CatalogAction, type HeroMeta, type TrailerTarget } from './catalog-view';
-import { PLAY_ICON, watchlistIcon } from './icons';
+import { CHECK_ICON, PLAY_ICON, watchlistIcon } from './icons';
 import { showToast } from './toast';
 import { t, tp } from '../i18n';
 import {
@@ -28,6 +28,7 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
 
   private currentVod: VodItem | null = null;
   private currentInfo: VodInfo | null = null;
+  protected readonly watchlistLeads = true;
   private openedFromWatchlist = false;
   private detailController: AbortController | null = null;
   private heroPlayRequest = 0;
@@ -165,7 +166,7 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
   }
 
   protected heroPlayLabel(vod: VodItem): string {
-    const saved = this.account ? StorageService.getResume(this.account.id, 'vod', vod.streamId) : null;
+    const saved = this.account ? this.savedResume(this.account.id, vod.streamId) : null;
     return t(saved ? 'common.resume' : 'catalog.play');
   }
 
@@ -176,7 +177,7 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
     const signal = this.requestSignal;
     if (!account || !signal) return;
     const request = ++this.heroPlayRequest;
-    const resume = !!StorageService.getResume(account.id, 'vod', vod.streamId);
+    const resume = !!this.savedResume(account.id, vod.streamId);
     void loadVodInfo(account, vod.streamId, signal)
       .catch((): VodInfo | null => null)
       .then((info) => {
@@ -231,8 +232,25 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
       : '';
   }
 
-  protected watchlistRail(): Safe | '' {
+  // A watched movie keeps its record but no longer resumes.
+  private savedResume(accountId: string, streamId: string): ResumeEntry | null {
+    const saved = StorageService.getResume(accountId, 'vod', streamId);
+    return saved && !saved.watched ? saved : null;
+  }
+
+  private isWatched(streamId: string): boolean {
+    return !!this.account && !!StorageService.getResume(this.account.id, 'vod', streamId)?.watched;
+  }
+
+  // Watched titles sink to the end of the Watchlist, keeping their order.
+  private orderedWatchlist(): WatchlistEntry[] {
     const entries = this.visibleWatchlist('vod');
+    const watched = entries.filter((entry) => this.isWatched(entry.itemId));
+    return entries.filter((entry) => watched.indexOf(entry) < 0).concat(watched);
+  }
+
+  protected watchlistRail(): Safe | '' {
+    const entries = this.orderedWatchlist();
     return entries.length
       ? this.rail('watchlist', t('common.watchlist'), entries.map((entry) => this.watchlistTile(entry)))
       : '';
@@ -240,12 +258,15 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
 
   private watchlistTile(entry: WatchlistEntry): Safe {
     const vod = this.watchlistEntryToVod(entry);
+    const watched = this.isWatched(vod.streamId);
     return html`
-      <div class="catalog-tile" data-focusable data-key="w:${vod.streamId}"
+      <div class="catalog-tile${watched ? ' is-watched' : ''}" data-focusable data-key="w:${vod.streamId}"
            data-item-id="${vod.streamId}" data-category-id="${vod.categoryId}"
            data-watchlist-item="${vod.streamId}">
         <div class="catalog-poster-wrap">${this.posterCell(vod.name, vod.poster)}${
-          this.itemLockBadge(vod.categoryId, vod.streamId)}</div>
+          this.itemLockBadge(vod.categoryId, vod.streamId)}${watched
+          ? html`<span class="catalog-tile-watched">${raw(CHECK_ICON)}${t('epg.watched')}</span>`
+          : ''}</div>
         <div class="catalog-tile-name">${vod.name}</div>
       </div>
     `;
@@ -389,7 +410,7 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
   private startVod(vod: VodItem, info: VodInfo | null, resume: boolean, fromWatchlist: boolean): void {
     const a = this.account;
     if (!a) return;
-    const saved = StorageService.getResume(a.id, 'vod', vod.streamId);
+    const saved = this.savedResume(a.id, vod.streamId);
     this.handlers.onPlayVod({
       url: this.vodUrl(vod),
       title: vod.name,
@@ -410,7 +431,7 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
   }
 
   private movieWatchlistQueue(streamId: string): VodQueueItem[] {
-    const entries = this.visibleWatchlist('vod');
+    const entries = this.orderedWatchlist();
     const index = entries.findIndex((entry) => entry.itemId === streamId);
     if (index < 0) return [];
     return entries.slice(index + 1).map((entry) => {
@@ -442,7 +463,7 @@ export class Movies extends CatalogView<VodCategory, VodItem> {
     const a = this.account;
     if (!vod || !a) return;
     const info = this.currentInfo;
-    const saved = StorageService.getResume(a.id, 'vod', vod.streamId);
+    const saved = this.savedResume(a.id, vod.streamId);
     const poster = info?.poster || vod.poster;
     const year = info ? movieYear(info) : '';
     const actions: CatalogAction[] = [];
