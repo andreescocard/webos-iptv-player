@@ -643,6 +643,26 @@ describe('StorageService resume store', () => {
     expect(StorageService.getResume('x1', 'vod', '10')?.position).toBe(1020);
   });
 
+  it('treats a movie of 20 minutes or more with 7 minutes left as finished', () => {
+    StorageService.setResume(resume({ position: 100, duration: 2700 }));
+    StorageService.setResume(resume({ position: 2700 - 7 * 60, duration: 2700 }));
+    expect(StorageService.getResume('x1', 'vod', '10')).toBeNull();
+    StorageService.setResume(resume({ position: 2700 - 8 * 60, duration: 2700 }));
+    expect(StorageService.getResume('x1', 'vod', '10')?.position).toBe(2700 - 8 * 60);
+  });
+
+  it('keeps a video under 20 minutes resumable with 7 minutes left', () => {
+    StorageService.setResume(resume({ position: 12 * 60, duration: 19 * 60 }));
+    expect(StorageService.getResume('x1', 'vod', '10')?.position).toBe(12 * 60);
+  });
+
+  it('prunes a stuck movie already in its last 7 minutes from the Continue list', () => {
+    StorageService.writeResume(resume({ itemId: '10', position: 2700 - 5 * 60, duration: 2700 }));
+    StorageService.writeResume(resume({ itemId: '11', position: 600, duration: 2700 }));
+    expect(StorageService.getResumeList('x1').map((e) => e.itemId)).toEqual(['11']);
+    expect(StorageService.getResume('x1', 'vod', '10')).toBeNull();
+  });
+
   it('does not store a position below RESUME_MIN_SECS, and clears an existing one', () => {
     StorageService.setResume(resume({ position: 5 }));
     expect(StorageService.getResume('x1', 'vod', '10')).toBeNull();

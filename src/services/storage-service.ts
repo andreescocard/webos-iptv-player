@@ -34,6 +34,17 @@ import {
 const log = createLogger('StorageService');
 
 const PREFIX = CONFIG.STORAGE_PREFIX;
+
+function isResumeFinished(entry: ResumeEntry): boolean {
+  const { EPISODE_FINISH_PAD, RESUME_FINISH_PAD, MOVIE_CREDITS_PAD, MOVIE_CREDITS_RATIO,
+    MOVIE_FINISH_REMAINING, MOVIE_FINISH_MIN_DURATION } = CONFIG.XTREAM;
+  if (entry.duration <= 0) return false;
+  const remaining = entry.duration - entry.position;
+  if (entry.kind === 'episode') return remaining <= EPISODE_FINISH_PAD;
+  const pad = Math.max(RESUME_FINISH_PAD, Math.min(MOVIE_CREDITS_PAD, entry.duration * MOVIE_CREDITS_RATIO),
+    entry.duration > MOVIE_FINISH_MIN_DURATION ? MOVIE_FINISH_REMAINING : 0);
+  return remaining <= pad;
+}
 export const LIVE_RECONNECT_ATTEMPT_OPTIONS: readonly number[] = [0, 1, 2, 3, 4, 5];
 export const NUMBER_ENTRY_OSD_TIMEOUT_MS_OPTIONS: readonly number[] = [1200, 1800, 2500, 3000, 3500];
 export const PLAYER_OSD_TIMEOUT_MS_OPTIONS: readonly number[] = [3000, 5000, 8000, 10000, 12000];
@@ -1144,10 +1155,7 @@ export const StorageService = {
     return entry ? cloneValue(entry) : null;
   },
   setResume(entry: ResumeEntry): void {
-    const { EPISODE_FINISH_PAD, RESUME_FINISH_PAD, MOVIE_CREDITS_PAD, MOVIE_CREDITS_RATIO } = CONFIG.XTREAM;
-    const pad = entry.kind === 'episode' ? EPISODE_FINISH_PAD
-      : Math.max(RESUME_FINISH_PAD, Math.min(MOVIE_CREDITS_PAD, entry.duration * MOVIE_CREDITS_RATIO));
-    const finished = entry.duration > 0 && entry.position >= entry.duration - pad;
+    const finished = isResumeFinished(entry);
     if (finished && entry.kind === 'episode') {
       // A finished episode stays on record as watched, and hands the Continue rail to the next one.
       this.writeResume({ ...entry, position: entry.duration, watched: true });
@@ -1208,8 +1216,13 @@ export const StorageService = {
   },
   getResumeList(accountId: string): ResumeEntry[] {
     const all = userData ? userData.resume : get<Record<string, ResumeEntry>>('resume', {});
-    return Object.keys(all)
-      .map((k) => all[k])
+    // A movie saved before the credits rule, or by an older build, is pruned rather than left stuck.
+    Object.keys(all).map((k) => all[k])
+      .filter((e) => e.kind !== 'episode' && isResumeFinished(e))
+      .forEach((e) => { this.clearResume(e.accountId, e.kind, e.itemId); });
+    const fresh = userData ? userData.resume : get<Record<string, ResumeEntry>>('resume', {});
+    return Object.keys(fresh)
+      .map((k) => fresh[k])
       .filter((e) => e.accountId === accountId && !e.watched)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       // Only a series' most recently watched episode continues; older ones may linger in stored data.
