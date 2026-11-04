@@ -27,7 +27,7 @@ import {
   collectionIcon, genreLabelKey, planCategories, SMART_IDS,
   type CollectionKind, type GenreId, type SmartKind,
 } from '../utils/category-groups';
-import { newReleases, recentlyAdded, topRated, uniqueTitles, type SmartTitle } from '../utils/smart-collections';
+import { newReleases, recentlyAdded, topRated, uniqueTitles, withoutRepeatedTitles, type SmartTitle } from '../utils/smart-collections';
 import { StorageService } from '../services/storage-service';
 import {
   catalogParentalRequest,
@@ -590,10 +590,20 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
   }
 
   private buildRailGroups(): { category: C; items: I[] }[] {
+    const collections = this.railCollections(CONFIG.XTREAM.MAX_RAILS)
+      .filter((c) => (this.itemsByCategory[c.category.id] ?? []).length > 0);
+    // Discovery rails share titles; the first rail to hold one keeps it.
+    const smartIndexes = collections.map((c, i) => (c.smart ? i : -1)).filter((i) => i >= 0);
+    const smartItems = withoutRepeatedTitles(
+      smartIndexes.map((i) => this.itemsByCategory[collections[i].category.id]),
+      (item) => this.itemId(item),
+      CONFIG.XTREAM.RAIL_ITEMS,
+    );
     const groups: { category: C; items: I[] }[] = [];
-    this.railCollections(CONFIG.XTREAM.MAX_RAILS).forEach((c) => {
-      const items = this.itemsByCategory[c.category.id];
-      if (items && items.length) groups.push({ category: c.category, items: items.slice(0, CONFIG.XTREAM.RAIL_ITEMS) });
+    collections.forEach((c, i) => {
+      const smartAt = smartIndexes.indexOf(i);
+      const items = smartAt >= 0 ? smartItems[smartAt] : this.itemsByCategory[c.category.id].slice(0, CONFIG.XTREAM.RAIL_ITEMS);
+      if (items.length) groups.push({ category: c.category, items });
     });
     return groups;
   }
@@ -620,7 +630,7 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
     settled.forEach((result) => {
       if (!(result instanceof Error)) merged.push(...result);
     });
-    return uniqueTitles(merged);
+    return uniqueTitles(merged, (item) => this.itemId(item));
   }
 
   // Loads the whole catalog in the background; it unlocks the smart lists and counts.
@@ -671,8 +681,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
     if (!byCategory) return [];
     const sources = new Set(sourceIds);
     const visible = this.allItems ?? [];
-    if (sourceIds.length === 1) return uniqueTitles(byCategory.get(sourceIds[0]) ?? []);
-    return uniqueTitles(visible.filter((item) => sources.has(this.itemCategoryId(item))));
+    if (sourceIds.length === 1) return uniqueTitles(byCategory.get(sourceIds[0]) ?? [], (item) => this.itemId(item));
+    return uniqueTitles(visible.filter((item) => sources.has(this.itemCategoryId(item))), (item) => this.itemId(item));
   }
 
   // The active mode's layer; hidden layers keep their DOM but never take focus.
@@ -1654,8 +1664,17 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
   }
 
   private visibleResume(accountId: string): ResumeEntry[] {
+    const seenOwners = new Set<string>();
     return StorageService.getResumeList(accountId)
-      .filter(entry => entry.kind === this.resumeKind && !isResumeConcealed(entry));
+      .filter(entry => entry.kind === this.resumeKind && !isResumeConcealed(entry))
+      .filter((entry) => {
+        const owner = entry.watchlistOwner;
+        if (!owner) return true;
+        const key = `${owner.kind}:${owner.itemId}`;
+        if (seenOwners.has(key)) return false;
+        seenOwners.add(key);
+        return true;
+      });
   }
 
   protected visibleWatchlist(kind: WatchlistKind): WatchlistEntry[] {
@@ -1894,8 +1913,8 @@ export abstract class CatalogView<C extends { id: string; name: string }, I exte
               <div class="catalog-rails-spacer catalog-hero-body" data-key="hero-body"
                    data-rail-key="hero">${this.heroText(html`${this.carouselDots()}${fillNote}`)}</div>
               <div class="catalog-rails-body" data-key="rails-body">
-                ${this.railGroups.filter((r) => this.isSmartRail(r)).map((r) => this.categoryRail(r))}
                 ${continueRail}
+                ${this.railGroups.filter((r) => this.isSmartRail(r)).map((r) => this.categoryRail(r))}
                 ${watchlistRail}
                 ${this.railGroups.filter((r) => !this.isSmartRail(r)).map((r) => this.categoryRail(r))}
                 ${categorySections.map((section) => html`

@@ -328,6 +328,20 @@ describe('Series browse + grid', () => {
     }));
   });
 
+  it('lists each series once in Continue Watching and puts the rail first', async () => {
+    const owner = { kind: 'series', itemId: 's1' };
+    const ep = (id: string, updatedAt: number) => ({
+      accountId: 'x1', kind: 'episode', itemId: id, name: `Series One — S1E${id} — Episode`, poster: '',
+      ext: 'mkv', position: 300, duration: 1500, updatedAt, watchlistOwner: owner,
+    });
+    storageMock.getResumeList.mockReturnValue([ep('3', 3), ep('2', 2), ep('1', 1)]);
+    await openWith([{ id: '1', name: 'Cat A' }], [series('s1', 'Series One')]);
+    const rails = Array.from(container.querySelectorAll('.catalog-rail-title')).map((el) => el.textContent);
+    expect(rails[0]).toBe('Continue Watching');
+    const tiles = Array.from(container.querySelectorAll('[data-rail-key="continue"] .catalog-tile'));
+    expect(tiles.map((el) => el.getAttribute('data-resume-episode'))).toEqual(['3']);
+  });
+
   it('shows a Watchlist rail from stored series snapshots', async () => {
     watchlistState.entries = [{
       accountId: 'x1', kind: 'series', itemId: 's9', name: 'Saved Series',

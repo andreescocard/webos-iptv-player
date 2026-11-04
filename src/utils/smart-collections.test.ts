@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nameYear, newReleases, recentlyAdded, titleYear, topRated, uniqueTitles, type SmartTitle } from './smart-collections';
+import { nameYear, newReleases, recentlyAdded, titleNameKey, titleYear, topRated, uniqueTitles, withoutRepeatedTitles, type SmartTitle } from './smart-collections';
 
 function title(name: string, extra: Partial<SmartTitle> = {}): SmartTitle {
   return { name, rating: '', ...extra };
@@ -78,5 +78,42 @@ describe('uniqueTitles', () => {
   it('shows a title once in the smart lists, at its best rank', () => {
     const items = [title('Delta', { rating: '7.5' }), title('Delta 4K', { rating: '9' }), title('Echo', { rating: '8' })];
     expect(topRated(items, 10).map((item) => item.name)).toEqual(['Delta 4K', 'Echo']);
+  });
+});
+
+describe('titleNameKey', () => {
+  it('folds quality, language, year tags and prefixes into one key', () => {
+    const key = titleNameKey('Title');
+    ['Title [4K]', 'Title (2023)', 'Title - Dublado', 'Title - Legendado', '4K | Title', 'PT-BR: Title', 'TITLE']
+      .forEach((name) => { expect(titleNameKey(name)).toBe(key); });
+    expect(titleNameKey('Title Two')).not.toBe(key);
+  });
+});
+
+describe('uniqueTitles variants', () => {
+  it('keeps the entry with the most metadata at the first position', () => {
+    const items = [title('Title [4K]'), title('Other', { rating: '8' }), title('Title', { rating: '8', added: 5 })];
+    expect(uniqueTitles(items).map((item) => item.name)).toEqual(['Title', 'Other']);
+  });
+
+  it('dedupes repeated ids even when names differ', () => {
+    const items = [{ ...title('One'), id: 'a' }, { ...title('Uno'), id: 'a' }];
+    expect(uniqueTitles(items, (item) => item.id)).toHaveLength(1);
+  });
+
+  it('feeds rails without variants', () => {
+    const items = [title('Title', { rating: '8' }), title('4K | Title', { rating: '9' }), title('Title - Dublado', { rating: '8' })];
+    expect(topRated(items, 10)).toHaveLength(1);
+  });
+});
+
+describe('withoutRepeatedTitles', () => {
+  it('keeps a title in the first rail only, by id and by name key', () => {
+    const rails = [
+      [{ ...title('One'), id: '1' }, { ...title('Two'), id: '2' }],
+      [{ ...title('One [4K]'), id: '9' }, { ...title('Two'), id: '2' }, { ...title('Three'), id: '3' }],
+    ];
+    const out = withoutRepeatedTitles(rails, (item) => item.id, 10);
+    expect(out.map((rail) => rail.map((item) => item.id))).toEqual([['1', '2'], ['3']]);
   });
 });

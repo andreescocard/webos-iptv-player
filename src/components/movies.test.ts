@@ -1718,6 +1718,8 @@ describe('Movies collections', () => {
       { ...vod('10', 'Alpha', '1'), rating: '8.5', added: 200 },
       { ...vod('11', 'Bravo', '1'), rating: '9', added: 300, year },
       { ...vod('12', 'Charlie', '2'), rating: '5', added: 100 },
+      { ...vod('13', 'Delta', '2'), year },
+      { ...vod('14', 'Echo', '2'), rating: '9.5' },
     ]);
     const { view } = await open();
     await settle();
@@ -1725,10 +1727,46 @@ describe('Movies collections', () => {
     const rail = (name: string) => Array.from(container.querySelectorAll('.catalog-rail')).find((el) =>
       el.querySelector('.catalog-rail-title')?.textContent === name)!;
     const names = (name: string) => Array.from(rail(name).querySelectorAll('.catalog-tile-name')).map((el) => el.textContent);
-    expect(names('Top rated')).toEqual(['Bravo', 'Alpha']);
+    expect(names('Top rated')).toEqual(['Echo']);
     expect(names('Recently added')).toEqual(['Bravo', 'Alpha', 'Charlie']);
-    expect(names('New releases')).toEqual(['Bravo']);
+    expect(names('New releases')).toEqual(['Delta']);
     expect(sectionTitles()[0]).toBe('Discover');
+    view.deactivate();
+  });
+
+  it('keeps a title out of later discovery rails and dedupes variants inside a rail', async () => {
+    catalogMock.loadVodStreams.mockImplementation(byCategory);
+    const year = new Date().getFullYear();
+    catalogMock.loadAllVodStreams.mockResolvedValue([
+      { ...vod('10', 'Alpha', '1'), rating: '8.5', added: 200, year },
+      { ...vod('11', '4K | Alpha', '2'), rating: '8.5', added: 190, year },
+      { ...vod('12', 'Alpha - Dublado', '2'), rating: '8.5', added: 180, year },
+      { ...vod('13', 'Bravo [4K]', '1'), rating: '9', added: 100 },
+      { ...vod('14', 'PT-BR: Bravo', '1'), rating: '9', added: 90 },
+      { ...vod('15', 'Charlie', '1'), rating: '9.5' },
+    ]);
+    const { view } = await open();
+    await settle();
+    const names = (name: string) => Array.from(Array.from(container.querySelectorAll('.catalog-rail')).find((el) =>
+      el.querySelector('.catalog-rail-title')?.textContent === name)?.querySelectorAll('.catalog-tile-name') ?? [])
+      .map((el) => el.textContent);
+    expect(names('Recently added')).toEqual(['Alpha', 'Bravo [4K]']);
+    expect(names('New releases')).toEqual([]);
+    expect(names('Top rated')).toEqual(['Charlie']);
+    view.deactivate();
+  });
+
+  it('puts Continue Watching before the discovery rails', async () => {
+    const { StorageService } = await import('../services/storage-service');
+    (StorageService.getResumeList as ReturnType<typeof vi.fn>).mockReturnValue([
+      { accountId: 'x1', kind: 'vod', itemId: '10', name: 'Alpha', poster: '', ext: 'mp4', position: 100, duration: 6000, updatedAt: 1 },
+    ]);
+    catalogMock.loadVodStreams.mockImplementation(byCategory);
+    catalogMock.loadAllVodStreams.mockResolvedValue([{ ...vod('10', 'Alpha', '1'), rating: '8.5', added: 200 }]);
+    const { view } = await open();
+    await settle();
+    expect(railTitles()[0]).toBe('Continue Watching');
+    expect(railTitles()).toContain('Recently added');
     view.deactivate();
   });
 

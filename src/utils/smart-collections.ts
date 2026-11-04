@@ -6,6 +6,7 @@ import { stripCombiningDiacritics } from './unicode-text';
 export interface SmartTitle {
   name: string;
   rating: string;
+  poster?: string;
   added?: number;
   year?: number;
 }
@@ -27,33 +28,100 @@ export function titleYear(item: SmartTitle): number {
 
 const YEAR_TAG = /[([]\s*(?:19|20)\d{2}\s*[)\]]/g;
 const QUALITY_TAG = /(^|[^a-z0-9])(?:4k|uhd|fhd|hd|sd|hdr\d*|1080p|720p|2160p|480p|h\.?26[45]|hevc|x26[45])(?=$|[^a-z0-9])/g;
+const TAG_WORDS = String.raw`4k|uhd|fhd|hd|sd|hdr\d*|1080p|720p|2160p|480p|hevc|dublado|dub|legendado|leg|dual audio|dual|multi|latino|nacional|pt-br|ptbr|pt|br|eng|en|esp|lat|web-dl|webrip|bluray|vip`;
+const BRACKET_TAG = new RegExp(String.raw`[(\[]\s*(?:${TAG_WORDS})(?:[\s,/|+-]+(?:${TAG_WORDS}))*\s*[)\]]`, 'g');
+const PREFIX_TAG = new RegExp(String.raw`^\s*(?:${TAG_WORDS})\s*[|:–—-]\s*`);
+const SUFFIX_TAG = new RegExp(String.raw`\s+[|:–—-]\s*(?:${TAG_WORDS})\s*$`);
 
-// A title's name without case, accents, punctuation, year, or quality tags.
+// A title's name without case, accents, punctuation, year, or quality/language tags.
 export function titleNameKey(name: string): string {
   const folded = typeof name.normalize === 'function' ? stripCombiningDiacritics(name.normalize('NFD')) : name;
-  return folded.toLowerCase()
-    .replace(YEAR_TAG, ' ')
+  let text = folded.toLowerCase().replace(YEAR_TAG, ' ').replace(BRACKET_TAG, ' ').trim();
+  for (let previous = ''; previous !== text;) {
+    previous = text;
+    text = text.replace(PREFIX_TAG, '').replace(SUFFIX_TAG, '').trim();
+  }
+  return text
     .replace(QUALITY_TAG, '$1 ')
-    .replace(/[^a-z0-9\u00c0-\uffff]+/g, ' ')
+    .replace(/[^a-z0-9À-￿]+/g, ' ')
     .trim();
 }
 
-// Providers list one title under several ids (a 4K copy, a second category);
-// keeps the first of each, unless both carry a year and the years differ.
-export function uniqueTitles<T extends SmartTitle>(items: T[]): T[] {
-  const yearsByName = new Map<string, number[]>();
-  return items.filter((item) => {
+function metadataScore(item: SmartTitle): number[] {
+  const rating = movieRating(item.rating) ?? 0;
+  const known = (rating ? 1 : 0) + (item.year ? 1 : 0) + (item.added ? 1 : 0) + (item.poster ? 1 : 0);
+  return [known, rating];
+}
+
+function betterThan(candidate: SmartTitle, current: SmartTitle): boolean {
+  const left = metadataScore(candidate);
+  const right = metadataScore(current);
+  return left[0] > right[0] || (left[0] === right[0] && left[1] > right[1]);
+}
+
+// Providers list one title under several ids (a 4K copy, a dubbed copy, a
+// second category). Keeps one per id and per name key, the one with the most
+// metadata (then the best rating) at the first copy's position, unless both
+// carry a year and the years differ.
+export function uniqueTitles<T extends SmartTitle>(items: T[], idOf?: (item: T) => string): T[] {
+  const kept: T[] = [];
+  const ids = new Map<string, number>();
+  const byName = new Map<string, Array<{ year: number; index: number }>>();
+  items.forEach((item) => {
+    const id = idOf ? idOf(item) : '';
     const key = titleNameKey(item.name);
-    if (!key) return true;
     const year = titleYear(item);
-    const years = yearsByName.get(key);
-    if (!years) {
-      yearsByName.set(key, [year]);
-      return true;
+    let index = id ? ids.get(id) : undefined;
+    if (index === undefined && key) {
+      const seen = byName.get(key);
+      const match = seen ? seen.filter((s) => !s.year || !year || s.year === year)[0] : undefined;
+      if (match) {
+        index = match.index;
+        if (!match.year) match.year = year;
+      }
     }
-    if (years.some((seen) => !seen || !year || seen === year)) return false;
-    years.push(year);
-    return true;
+    if (index !== undefined) {
+      if (betterThan(item, kept[index])) kept[index] = item;
+      if (id) ids.set(id, index);
+      return;
+    }
+    index = kept.length;
+    kept.push(item);
+    if (id) ids.set(id, index);
+    if (key) {
+      const seen = byName.get(key);
+      if (seen) seen.push({ year, index });
+      else byName.set(key, [{ year, index }]);
+    }
+  });
+  return kept;
+}
+
+// For auto-generated rails on one page: each title shows in the first rail
+// that has it, matched by id and by name key.
+export function withoutRepeatedTitles<T extends SmartTitle>(
+  rails: T[][], idOf: (item: T) => string, limit: number,
+): T[][] {
+  const ids = new Set<string>();
+  const names = new Map<string, number[]>();
+  return rails.map((rail) => {
+    const shown = rail.filter((item) => {
+      const id = idOf(item);
+      const key = titleNameKey(item.name);
+      const year = titleYear(item);
+      if (ids.has(id)) return false;
+      const years = key ? names.get(key) : undefined;
+      return !(years && years.some((seen) => !seen || !year || seen === year));
+    }).slice(0, limit);
+    shown.forEach((item) => {
+      ids.add(idOf(item));
+      const key = titleNameKey(item.name);
+      if (!key) return;
+      const years = names.get(key);
+      if (years) years.push(titleYear(item));
+      else names.set(key, [titleYear(item)]);
+    });
+    return shown;
   });
 }
 
