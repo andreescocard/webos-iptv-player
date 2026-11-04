@@ -39,8 +39,19 @@ test('stale cached EPG stays visible while a refresh is in flight', async ({ pag
 
   try {
     await page.goto('/');
-    const nowPlaying = page.locator('.channel-main .channel-item').first().locator('.channel-now');
+    const nowPlaying = page.locator('#view-channels .live-card').first().locator('.catalog-tile-episode');
     await expect(nowPlaying).toHaveText('Cached Show');
+    await expect.poll(() => page.evaluate((url) => new Promise<boolean>((resolve) => {
+      const open = indexedDB.open('iptv');
+      open.onerror = () => resolve(false);
+      open.onsuccess = () => {
+        const db = open.result;
+        if (!db.objectStoreNames.contains('epg-cache')) { db.close(); resolve(false); return; }
+        const read = db.transaction('epg-cache').objectStore('epg-cache').get(url);
+        read.onerror = () => { db.close(); resolve(false); };
+        read.onsuccess = () => { db.close(); resolve(!!read.result); };
+      };
+    }), epgUrl)).toBe(true);
 
     await page.evaluate(({ url, timestamp }) => new Promise<void>((resolve, reject) => {
       const open = indexedDB.open('iptv');
@@ -311,8 +322,9 @@ test('Down from the tab bar resumes the Guide on the day and channel Up left', a
     localStorage.setItem('iptv_epg_url', JSON.stringify('http://host/epg.xml'));
   });
   await page.goto('/');
-  await expect(page.locator('#view-channels .channel-item').first()).toHaveClass(/\bfocused\b/);
+  await expect(page.locator('#view-channels .live-card').first()).toHaveClass(/\bfocused\b/);
 
+  await page.keyboard.press('ArrowUp');
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowDown');
@@ -363,7 +375,8 @@ test.describe('Guide pointer and keys', () => {
       localStorage.setItem('iptv_tz_mode', JSON.stringify('device'));
     });
     await page.goto('/');
-    await expect(page.locator('#view-channels .channel-item').first()).toHaveClass(/\bfocused\b/);
+    await expect(page.locator('#view-channels .live-card').first()).toHaveClass(/\bfocused\b/);
+    await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowDown');
@@ -397,10 +410,10 @@ test.describe('Guide pointer and keys', () => {
       await page.locator('#text-size .dropdown-trigger').click();
       await page.locator(`#text-size .dropdown-option[data-dropdown-value="${size}"]`).click();
       await page.locator('#save-settings').click();
-      const clipped = await page.locator('#view-channels .channel-item').evaluateAll(rows =>
+      const clipped = await page.locator('#view-channels .live-card').evaluateAll(rows =>
         rows.some(row => {
           const box = row.getBoundingClientRect();
-          return Array.from(row.querySelectorAll('.channel-name, .channel-now, .channel-progress'))
+          return Array.from(row.querySelectorAll('.catalog-tile-name, .catalog-tile-episode, .channel-progress'))
             .some(child => {
               const content = child.getBoundingClientRect();
               return content.top < box.top || content.bottom > box.bottom;
@@ -643,7 +656,7 @@ test.describe('Guide pointer and keys', () => {
       localStorage.setItem('iptv_tz_mode', JSON.stringify('device'));
     });
     await page.goto('/');
-    await expect(page.locator('#view-channels .channel-item').first()).toHaveClass(/\bfocused\b/);
+    await expect(page.locator('#view-channels .live-card').first()).toHaveClass(/\bfocused\b/);
     await page.keyboard.press('1');
     await page.keyboard.press('5');
     await page.keyboard.press('0');

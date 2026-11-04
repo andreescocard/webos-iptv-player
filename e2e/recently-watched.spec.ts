@@ -3,6 +3,7 @@ import {
   expect,
   type Page,
   enterTab,
+  openChannelList,
   LIVE_MANIFEST,
   readUserDataStore,
 } from './helpers';
@@ -94,6 +95,11 @@ async function setup(page: Page, seedHistory = true): Promise<void> {
 async function openRecentlyWatched(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
+  await expect(page.locator('#view-channels .live-card.recent-live').first()).toBeVisible();
+}
+
+async function openRecentlyWatchedList(page: Page): Promise<void> {
+  await openChannelList(page);
   await page.locator('[data-group="builtin:recently-watched"]').click();
 }
 
@@ -101,6 +107,17 @@ test('mixes live and resumable Catch-up rows in recency order', async ({ page })
   await setup(page);
   await openRecentlyWatched(page);
 
+  const rail = page.locator('#view-channels .live-rail').first();
+  await expect(rail.locator('.catalog-rail-title')).toBeVisible();
+  const cards = rail.locator('.live-card');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(0)).toHaveClass(/recent-catchup/);
+  await expect(cards.nth(0)).toContainText('Program Alpha');
+  await expect(cards.nth(0)).toContainText('Resume at 30:00');
+  await expect(cards.nth(1)).toHaveClass(/recent-live/);
+  await expect(cards.nth(1)).toContainText('Channel Bravo');
+
+  await openRecentlyWatchedList(page);
   const rows = page.locator('.channel-main .recent-item');
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toHaveClass(/recent-catchup/);
@@ -116,7 +133,7 @@ test('adds a live channel only after confirmed playback', async ({ page }) => {
   await expect(page.locator('#view-channels')).toBeVisible();
 
   const manifestResponse = page.waitForResponse(response => response.url().includes('/b.m3u8'));
-  await page.locator('.channel-item').filter({ hasText: 'Channel Bravo' }).click();
+  await page.locator('#view-channels .live-card').filter({ hasText: 'Channel Bravo' }).first().click();
   await expect(page.locator('#view-player')).toBeVisible();
   await manifestResponse;
   await page.evaluate(() => {
@@ -132,7 +149,8 @@ test('adds a live channel only after confirmed playback', async ({ page }) => {
   }, { timeout: 12_000, intervals: [500] }).toBe(1);
 
   await page.keyboard.press('Escape');
-  await page.locator('[data-group="builtin:recently-watched"]').click();
+  await expect(page.locator('#view-channels .live-card.recent-live')).toContainText('Channel Bravo');
+  await openRecentlyWatchedList(page);
   await expect(page.locator('.recent-live')).toContainText('Channel Bravo');
 });
 
@@ -204,8 +222,11 @@ test('filters Recently Watched by the selected playlist', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
   await page.locator('[data-playlist="p1"]').click();
-  await page.locator('[data-group="builtin:recently-watched"]').click();
+  await expect(page.locator('#view-channels .live-card.recent-live')).toHaveCount(1);
+  await expect(page.locator('#view-channels .live-card.recent-live')).toContainText('Channel Alpha');
+  await expect(page.locator('#view-channels .live-card.recent-live')).not.toContainText('Channel Bravo');
 
+  await openRecentlyWatchedList(page);
   await expect(page.locator('.recent-item')).toHaveCount(1);
   await expect(page.locator('.recent-item')).toContainText('Channel Alpha');
   await expect(page.locator('.recent-item')).not.toContainText('Channel Bravo');

@@ -82,6 +82,7 @@ export class EpgGrid {
   private focusProg = 0;
   private resumePrompt = new CatchupResumePrompt('prompt.epg');
   private archiveLoadingKey = '';
+  private failedLogos = new Set<string>();
   private readonly channelVirtualizer = new VirtualList({
     itemSize: CHANNEL_ROW_SIZE,
     overscan: VIRTUAL_OVERSCAN,
@@ -619,6 +620,9 @@ export class EpgGrid {
                 .map(({ channel: ch, globalIndex }, offset) => {
               const itemIndex = channelRange.start + offset;
               const sel = globalIndex === this.selectedChannelIdx;
+              const logo = ch.logo && !this.failedLogos.has(ch.logo)
+                ? html`<img class="channel-logo" src="${ch.logo}" alt="" loading="lazy">`
+                : html`<div class="channel-logo-placeholder">${ch.name.charAt(0)}</div>`;
               return html`
                 <div class="epg-channel-item ${sel ? 'selected' : ''}"
                      data-key="${channelKey(ch)}"
@@ -626,6 +630,7 @@ export class EpgGrid {
                      data-channel-pos="${itemIndex}" data-hover-target
                      style="top:${this.channelVirtualizer.getItemOffset(itemIndex)}px">
                   <span class="epg-ch-num">${globalIndex + 1}</span>
+                  <div class="channel-logo-wrap">${logo}</div>
                   <span class="epg-ch-name">${raw(channelLockBadge(ch))}${ch.name}</span>
                 </div>
               `;
@@ -914,6 +919,17 @@ export class EpgGrid {
       this.lightProgramme(parseInt(item.dataset.progIdx!, 10));
       this.paint('pointer');
     });
+
+    this.container.addEventListener('error', (e: Event) => {
+      const target = e.target;
+      if (!(target instanceof HTMLImageElement)
+          || !target.classList.contains('channel-logo')) return;
+      const src = target.getAttribute('src');
+      if (src && !this.failedLogos.has(src)) {
+        this.failedLogos.add(src);
+        this.render();
+      }
+    }, true);
 
     this.container.addEventListener('input', (e: Event) => {
       const input = e.target as HTMLInputElement;

@@ -218,7 +218,7 @@ test('uploaded-only startup enters channels after background reconciliation', as
   await releaseServiceStart(page);
 
   await expect(page.locator('#view-channels')).toBeVisible();
-  await expect(page.locator('.channel-item')).toHaveCount(2);
+  await expect(page.locator('#view-channels .live-card')).toHaveCount(2);
 });
 
 test('dev-mode query replaces the reminder fallback activity', async ({ page }) => {
@@ -276,7 +276,7 @@ test('an expired playlist cache boots at once and refreshes in the background', 
 
   try {
     await page.goto('/');
-    const names = page.locator('.channel-main .channel-name');
+    const names = page.locator('#view-channels .live-card .catalog-tile-name');
     await expect(names).toHaveText(['Channel One', 'Channel Two']);
 
     // The parsed-playlist write is deferred, so wait for it before ageing it.

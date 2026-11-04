@@ -1,9 +1,10 @@
-import { test, expect, routePlaylist, seedPlaylist, enterTab } from './helpers';
+import { test, expect, routePlaylist, seedPlaylist, enterTab, openChannelList } from './helpers';
 
 test('switching through every language refreshes cached Recently Watched labels', async ({ page }) => {
   await routePlaylist(page);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
 
   const recentLabel = page.locator(
     '[data-group="builtin:recently-watched"] .group-name',

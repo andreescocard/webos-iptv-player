@@ -15,7 +15,7 @@ test('disabling every M3U source hides channels until the source is enabled agai
   await routeLiveManifest(page);
   await seedPlaylist(page);
   await page.goto('/');
-  await expect(page.locator('.channel-main .channel-item')).toHaveCount(2);
+  await expect(page.locator('#view-channels .live-card')).toHaveCount(2);
 
   await enterTab(page, 'settings');
   const sourceToggle = page.locator('#playlist-entries .source-toggle');
@@ -60,7 +60,7 @@ test('disabling every M3U source hides channels until the source is enabled agai
   await page.locator('#save-settings').click();
 
   await expect(page.locator('#view-channels')).toBeVisible();
-  await expect(page.locator('.channel-main .channel-item')).toHaveCount(0);
+  await expect(page.locator('#view-channels .live-card')).toHaveCount(0);
   await expect(page.locator('.empty-state'))
     .toContainText('No sources are enabled. Enable one in Settings.');
   await expect.poll(() => page.evaluate(() => {
@@ -73,7 +73,7 @@ test('disabling every M3U source hides channels until the source is enabled agai
   await page.locator('#save-settings').click();
 
   await expect(page.locator('#view-channels')).toBeVisible();
-  await expect(page.locator('.channel-main .channel-item')).toHaveCount(2);
+  await expect(page.locator('#view-channels .live-card')).toHaveCount(2);
   await expect.poll(() => page.evaluate(() => {
     const sources = JSON.parse(localStorage.getItem('iptv_playlists') || '[]');
     return 'enabled' in sources[0];

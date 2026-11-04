@@ -61,11 +61,11 @@ test('loads live channels from Player API when get.php is unavailable', async ({
 
   await page.goto('/');
 
-  const channels = page.locator('.channel-main .channel-item');
+  const channels = page.locator('#view-channels .live-card');
   await expect(channels).toHaveCount(2);
   await expect(channels.nth(0)).toContainText('Alpha');
   await expect(channels.nth(1)).toContainText('Bravo');
-  await expect(page.locator('[data-group="source:Group 1"]')).toBeVisible();
+  await expect(page.locator('#view-channels .live-rail .catalog-rail-title', { hasText: 'Group 1' })).toBeVisible();
   expect(server.actions()).toEqual(expect.arrayContaining([
     'get_live_categories',
     'get_live_streams',
@@ -84,7 +84,7 @@ test('constructs an HLS live URL when categories are unsupported', async ({ page
 
   await page.goto('/');
 
-  const channel = page.locator('.channel-main .channel-item').first();
+  const channel = page.locator('#view-channels .live-card').first();
   await expect(channel).toContainText('Alpha');
   const liveRequest = server.waitForRequest(
     request => request.pathname === '/live/u1/p1/201.m3u8',

@@ -188,6 +188,20 @@ describe('EpgGrid.render', () => {
     expect(channelItems().map(el => el.querySelector('.epg-ch-name')!.textContent)).toEqual(['Chan A', 'Chan B']);
   });
 
+  it('shows a channel logo, and its initial once the logo fails to load', () => {
+    state.channels[0].logo = 'http://host/a.png';
+    try {
+      grid.render();
+      const logo = channelItems()[0].querySelector<HTMLImageElement>('img.channel-logo');
+      expect(logo?.getAttribute('src')).toBe('http://host/a.png');
+      logo!.dispatchEvent(new Event('error'));
+      expect(channelItems()[0].querySelector('img.channel-logo')).toBeNull();
+      expect(channelItems()[0].querySelector('.channel-logo-placeholder')?.textContent).toBe('C');
+    } finally {
+      state.channels[0].logo = '';
+    }
+  });
+
   it('builds one date column per day spanned by program data', () => {
     expect(dateItems()).toHaveLength(2); // today + tomorrow
   });

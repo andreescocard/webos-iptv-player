@@ -2,6 +2,7 @@ import {
   test,
   expect,
   enterTab,
+  openChannelList,
   routePlaylist,
   seedPlaylist,
   SEARCH_M3U,
@@ -34,6 +35,13 @@ test('expands localized channel navigation without clipping', async ({ page }) =
 
   await expect(page.locator('html')).toHaveAttribute('lang', 'en-XA');
   await expect(page.locator('.tab-bar-item[data-section="live"]')).toContainText('[!!');
+  await expect(page.locator('#view-channels .live-card').first()).toBeVisible();
+  expect(await textOverflow(page, [
+    '.tab-bar-item',
+    '.live-browse-head button',
+    '.catalog-rail-title',
+  ].join(','))).toEqual([]);
+  await openChannelList(page);
   expect(await textOverflow(page, [
     '.tab-bar-item',
     '.channel-count',

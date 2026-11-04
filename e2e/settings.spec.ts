@@ -1,5 +1,5 @@
 import {
-  test, expect, type Page, routePlaylist, routeLiveManifest, seedPlaylist, PLAYLIST_URL, enterTab, readUserDataStore,
+  test, expect, type Page, routePlaylist, routeLiveManifest, seedPlaylist, PLAYLIST_URL, enterTab, readUserDataStore, openChannelList,
 } from './helpers';
 import type { Locator } from '@playwright/test';
 import { seedXtream } from './fixtures/xtream';
@@ -717,7 +717,7 @@ test.describe('Settings navigation', () => {
     // Persisted across a relaunch and applied outside Settings, without
     // changing the dimensions of controls.
     await page.reload();
-    await expect(page.locator('#view-channels')).toBeVisible();
+    await openChannelList(page);
     const row = page.locator('.channel-item').first();
     const metrics = () => row.evaluate((el) => {
       const cs = getComputedStyle(el);
@@ -732,10 +732,13 @@ test.describe('Settings navigation', () => {
     // Same measurements at the default size, from a clean load.
     await page.evaluate(() => localStorage.removeItem('iptv_text_size'));
     await page.reload();
-    await expect(page.locator('#view-channels')).toBeVisible();
+    await openChannelList(page);
     const unscaled = await metrics();
     expect(scaled.font).toBeCloseTo(unscaled.font * 1.3, 1);
-    for (const key of ['height', 'padding', 'logo'] as const)
+    // Rows grow with the text (24px + 60px * scale); padding and logo do not.
+    expect(unscaled.height).toBeCloseTo(24 + 60, 1);
+    expect(scaled.height).toBeCloseTo(24 + 60 * 1.3, 1);
+    for (const key of ['padding', 'logo'] as const)
       expect(scaled[key], key).toBeCloseTo(unscaled[key], 1);
   });
 });
@@ -1104,8 +1107,8 @@ test.describe('Settings playlists', () => {
     await page.keyboard.press('Enter');
 
     await expect(page.locator('#view-channels')).toBeVisible();
-    await expect(page.locator('.channel-main .channel-name').filter({ hasText: 'Channel One' })).toBeVisible();
-    await expect(page.locator('.channel-main .channel-name').filter({ hasText: 'Channel Two' })).toBeVisible();
+    await expect(page.locator('#view-channels .live-card[data-channel-index] .catalog-tile-name').filter({ hasText: 'Channel One' })).toBeVisible();
+    await expect(page.locator('#view-channels .live-card[data-channel-index] .catalog-tile-name').filter({ hasText: 'Channel Two' })).toBeVisible();
   });
 
   test('removing the last playlist clears in-memory channels so back returns an empty list', async ({ page }) => {
@@ -1115,7 +1118,7 @@ test.describe('Settings playlists', () => {
 
     // Channels render from the configured playlist.
     await expect(page.locator('#view-channels')).toBeVisible();
-    await expect(page.locator('.channel-main .channel-item')).toHaveCount(2);
+    await expect(page.locator('#view-channels .live-card[data-channel-index]')).toHaveCount(2);
 
     // Open settings, remove the only playlist, and save.
     await enterTab(page, 'settings');
@@ -1149,7 +1152,7 @@ test.describe('Settings playlists', () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
     });
     await expect(page.locator('#view-channels')).toBeVisible();
-    await expect(page.locator('.channel-main .channel-item')).toHaveCount(0);
+    await expect(page.locator('#view-channels .live-card[data-channel-index]')).toHaveCount(0);
     await expect(page.locator('.empty-state')).toContainText('No channels found');
   });
 
@@ -1348,7 +1351,7 @@ test.describe('Settings Xtream live output', () => {
     });
 
     await page.goto('/');
-    await expect(page.locator('.channel-main .channel-item')).toContainText('TS Channel');
+    await expect(page.locator('#view-channels .live-card[data-channel-index]')).toContainText('TS Channel');
     await enterTab(page, 'settings');
     await page.locator('[data-settings-target="sources"]').click();
     await page.locator('#xtream-output-x1 .dropdown-trigger').click();
@@ -1362,7 +1365,7 @@ test.describe('Settings Xtream live output', () => {
     await hlsRequest;
 
     await expect(page.locator('#view-channels')).toBeVisible();
-    await expect(page.locator('.channel-main .channel-item')).toContainText('HLS Channel');
+    await expect(page.locator('#view-channels .live-card[data-channel-index]')).toContainText('HLS Channel');
     await expect.poll(() => page.evaluate(() => {
       const playlists = JSON.parse(localStorage.getItem('iptv_playlists') || '[]');
       return playlists[0]?.xtream?.liveOutput;
@@ -1414,7 +1417,7 @@ test.describe('Settings Xtream live categories', () => {
     }, liveCategories);
   }
 
-  const channels = (page: Page) => page.locator('.channel-main .channel-item');
+  const channels = (page: Page) => page.locator('#view-channels .live-card[data-channel-index]');
   const press = (page: Page, keyCode: number) => page.evaluate(code => document.dispatchEvent(
     new KeyboardEvent('keydown', { keyCode: code, bubbles: true })), keyCode);
 

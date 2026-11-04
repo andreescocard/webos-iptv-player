@@ -5,6 +5,7 @@ import {
   seedPlaylist,
   SEARCH_M3U,
   enterTab,
+  openChannelList,
   routeLiveManifest,
   measureRowTextFit,
   type Page,
@@ -25,6 +26,7 @@ test('a malicious channel name from the playlist is escaped, not executed', asyn
   await routePlaylist(page, evilM3u);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
 
   await expect(page.locator('#view-channels')).toBeVisible();
   await expect(page.locator('.channel-main .channel-item')).toHaveCount(1);
@@ -40,6 +42,7 @@ test('the sidebar has no inline search magnifier or settings gear (moved to the 
   await routePlaylist(page, SEARCH_M3U);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('#view-channels')).toBeVisible();
   await expect(page.locator('#view-channels .search-icon')).toHaveCount(0);
   await expect(page.locator('#view-channels .channel-search')).toHaveCount(0);
@@ -53,6 +56,7 @@ test('selecting a group filters the channel list', async ({ page }) => {
   await routePlaylist(page, SEARCH_M3U);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('#view-channels')).toBeVisible();
   await expect(page.locator('.channel-main .channel-item')).toHaveCount(4);
 
@@ -66,6 +70,7 @@ test('M3U-only Search (via the tab bar) filters channels into a vertical list', 
   await routePlaylist(page, SEARCH_M3U);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('#view-channels')).toBeVisible();
 
   await enterTab(page, 'search');
@@ -83,6 +88,7 @@ test('M3U-only Search: a pointer click plays the channel', async ({ page }) => {
   await routeLiveManifest(page);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('#view-channels')).toBeVisible();
 
   await enterTab(page, 'search');
@@ -107,6 +113,7 @@ test('channel rows fit both text lines in their fixed box', async ({ page }) => 
   await routePlaylist(page, SEARCH_M3U);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('#view-channels')).toBeVisible();
 
   const fit = await measureRowTextFit(
@@ -128,6 +135,7 @@ test('M3U-only Search fills the view when Channels is the only section', async (
   await routePlaylist(page, many.join('\n'));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('#view-channels')).toBeVisible();
 
   await enterTab(page, 'search');
@@ -154,6 +162,7 @@ test('the list follows the playing channel however it was tuned', async ({ page 
   await routeLiveManifest(page);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('#view-channels')).toBeVisible();
 
   // Tune far down the list, so the virtualized window is centered on 123...
@@ -211,6 +220,7 @@ test('player sidebar reaches sources, groups, and channels by the shortest D-pad
     ]));
   });
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('.channel-main .channel-item')).toHaveCount(2);
 
   await page.keyboard.press('ArrowLeft');
@@ -276,6 +286,7 @@ test('direct channel entry scrolls the list to the tuned channel and keeps it on
   await routeLiveManifest(page);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('#view-channels')).toBeVisible();
   // Channel 215 is far outside the virtualized window rendered at startup.
   await expect(page.locator('.channel-main .channel-item')).not.toHaveCount(300);
@@ -313,6 +324,7 @@ test('returning to a far playing channel keeps it focused under full animation',
   await routeLiveManifest(page);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('html')).toHaveAttribute('data-animation', 'full');
   await expect(page.locator('#view-channels')).toBeVisible();
 
@@ -347,6 +359,7 @@ test('returning from the sidebar restores the channel you left', async ({ page }
   await routePlaylist(page, lines.join('\n'));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('#view-channels')).toBeVisible();
 
   for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
@@ -398,6 +411,7 @@ test('Down after the focused row scrolls out of view stays in the channel list',
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
 
   // Scroll without the pointer following the rows (cursor hidden, or the wheel
@@ -425,6 +439,7 @@ test('a stationary pointer over the channel list does not trap D-pad Down', asyn
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   const main = page.locator('#view-channels .channel-main');
   const start = main.locator('[data-list-position="5"]');
   await expect(start).toBeVisible();
@@ -475,6 +490,7 @@ test('Down after the focused group scrolls out of view stays in the group list',
   await routePlaylist(page, lines.join('\n'));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   const groups = page.locator('#view-channels .group-list');
   for (let i = 0; i < 4 && (await groups.locator('.focused').count()) === 0; i++) {
@@ -504,6 +520,7 @@ test('OK in edit mode after the focused row scrolls away does not grab the hidde
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 405, bubbles: true })));
   await expect(page.locator('.edit-hints')).toBeVisible();
@@ -536,6 +553,7 @@ test('OK in edit mode with a grabbed row scrolled away brings the grabbed row ba
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 405, bubbles: true })));
   await expect(page.locator('.edit-hints')).toBeVisible();
@@ -575,6 +593,7 @@ test('a focused row scrolled just out of view, still rendered, is not acted on',
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   await enterEditMode(page);
   const main = page.locator('#view-channels .channel-main');
@@ -619,6 +638,7 @@ test('OK in edit mode with a grabbed group scrolled away brings the group back',
   await routePlaylist(page, lines.join('\n'));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   await enterEditMode(page);
   const groups = page.locator('#view-channels .group-list');
@@ -663,6 +683,7 @@ test('focus resumed in edit mode is not hidden under the hints bar', async ({ pa
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   await enterEditMode(page);
   const main = page.locator('#view-channels .channel-main');
@@ -685,6 +706,7 @@ test('Up on a focused first row just out of view resumes instead of leaving the 
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   const main = page.locator('#view-channels .channel-main');
   const row0 = main.locator('[data-list-position="0"]');
@@ -707,6 +729,7 @@ test('Green on a focused row just out of view resumes instead of toggling its fa
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   const main = page.locator('#view-channels .channel-main');
   const favorites = page.locator('#view-channels [data-group="builtin:favorites"]');
@@ -726,6 +749,7 @@ test('OK commits a rename even after the renamed row scrolls out of view', async
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   await enterEditMode(page);
   const main = page.locator('#view-channels .channel-main');
@@ -752,6 +776,7 @@ test('OK on a rename whose row left the rendered list brings it back with the ty
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   await enterEditMode(page);
   const main = page.locator('#view-channels .channel-main');
@@ -778,6 +803,7 @@ test('Blue on a grabbed row scrolled out of view opens the rename on that row', 
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   await enterEditMode(page);
   const main = page.locator('#view-channels .channel-main');
@@ -806,6 +832,7 @@ test('after the pointer leaves, the first Down shows the row and the next one mo
   await routePlaylist(page, longPlaylist(30));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   const main = page.locator('#view-channels .channel-main');
   const row = main.locator('[data-list-position="5"]');
   await expect(row).toBeVisible();
@@ -840,6 +867,7 @@ test('Down after the wheel scrolls a pointer-left row away resumes in view', asy
     updatedAt: now - i * 1000,
   })));
   await page.goto('/');
+  await openChannelList(page);
   await page.locator('[data-group="builtin:recently-watched"]').click();
   const main = page.locator('#view-channels .channel-main');
   await expect(main.locator('.recent-item')).toHaveCount(30);
@@ -870,6 +898,7 @@ test('a wheel step below a short list moves the pointer-left row at once', async
   await routePlaylist(page, longPlaylist(3));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   const main = page.locator('#view-channels .channel-main');
   const row = main.locator('[data-list-position="0"]');
   await expect(row).toBeVisible();
@@ -890,6 +919,7 @@ test('Down from the tab bar resumes in view after the list scrolled meanwhile', 
   await routePlaylist(page, longPlaylist(60));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   const main = page.locator('#view-channels .channel-main');
   await expect(main.locator('[data-list-position="0"]')).toHaveClass(/\bfocused\b/);
   const list = await main.boundingBox();
@@ -918,6 +948,7 @@ test('the Live tab clicked from another section shows the far channel that is pl
   await routeLiveManifest(page);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('#view-channels')).toBeVisible();
   await page.keyboard.press('1');
   await page.keyboard.press('5');
@@ -946,6 +977,7 @@ test('Back from the Guide resumes the row you left, brought into view', async ({
   await routePlaylist(page, longPlaylist(300));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowDown');
   const main = page.locator('#view-channels .channel-main');
@@ -987,6 +1019,7 @@ test('Back from the Guide resumes a group scrolled out of view, brought into vie
   await routePlaylist(page, lines.join('\n'));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   const groups = page.locator('#view-channels .group-list');
   for (let i = 0; i < 4 && (await groups.locator('.focused').count()) === 0; i++) {
@@ -1023,6 +1056,7 @@ test('Down from the tab bar resumes the row you left after a preview was stopped
   await seedPlaylist(page);
   await page.addInitScript(() => localStorage.setItem('iptv_live_preview', 'true'));
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   const main = page.locator('#view-channels .channel-main');
   const preview = page.locator('#view-channels #live-preview');
@@ -1057,6 +1091,7 @@ test('Back from the Guide lands on a channel tuned elsewhere, not the row you le
   await routeLiveManifest(page);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   await focusFirstChannelRow(page);
   for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowDown');
   const main = page.locator('#view-channels .channel-main');
@@ -1096,6 +1131,7 @@ async function hoverCenter(page: Page, selector: string): Promise<void> {
 test('a control hovered while the account menu held the keys lights once it hands them back', async ({ page }) => {
   await seedXtream(page);
   await page.goto('/');
+  await openChannelList(page);
   await expect(page.locator('#view-channels .group-item').first()).toBeVisible();
 
   await page.locator('.account-avatar').click();

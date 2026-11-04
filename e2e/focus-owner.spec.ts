@@ -97,6 +97,7 @@ test('watching a reminder that comes due over the Clear all confirmation closes 
 test('a reminder takes the keys from the tab bar and gives them back', async ({ page }) => {
   await setup(page);
   await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
   await expect(owner(page)).toHaveAttribute('data-focus-scope', 'tabbar');
 
   await reminderComesDue(page);

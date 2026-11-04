@@ -1,4 +1,4 @@
-import { enterTab, test, expect, isChromium53, neuterVideo, routeLiveManifest, routePlaylist, type Page } from './helpers';
+import { enterTab, openChannelList, test, expect, isChromium53, neuterVideo, routeLiveManifest, routePlaylist, type Page } from './helpers';
 import { type Browser } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { findGappedLooseText, measureLooseText, newLegacyPage, pixelDiff } from './pixel-parity';
@@ -139,7 +139,14 @@ async function prepareM3U(page: Page): Promise<void> {
   }, channelKey({ url: 'http://streams.example.com/one.m3u8' } as Channel));
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
-  await expect(page.locator('.channel-item')).toHaveCount(2);
+  await expect(page.locator('#view-channels .live-card').first()).toBeVisible();
+}
+
+// Live opens on the rails; the list screen (sidebar + channels) is one click further.
+async function liveList(p: Page): Promise<void> {
+  await enterTab(p, 'live');
+  if (await p.locator('#view-channels .channel-main').isVisible()) return;
+  await openChannelList(p);
 }
 
 async function prepareXtream(page: Page): Promise<void> {
@@ -213,6 +220,7 @@ async function leaveParentalLocked(p: Page): Promise<void> {
 
 const M3U_SCREENS: Screen[] = [
   { name: 'live', budget: 0, go: async () => { /* the landing view */ } },
+  { name: 'live-list', budget: 0, go: liveList },
   { name: 'guide', budget: 0, go: (p) => enterTab(p, 'epg') },
   {
     name: 'guide-groups',
@@ -287,7 +295,7 @@ const M3U_SCREENS: Screen[] = [
     name: 'favorites-manage',
     budget: 0,
     go: async (p) => {
-      await enterTab(p, 'live');
+      await liveList(p);
       await p.locator('[data-group="builtin:favorites"]').click();
       await p.locator('[data-favorite-manage]').click();
       await expect(p.locator('.edit-hints.favorite-hints')).toBeVisible();
@@ -300,7 +308,7 @@ const M3U_SCREENS: Screen[] = [
     name: 'channel-editor',
     budget: 0,
     go: async (p) => {
-      await enterTab(p, 'live');
+      await liveList(p);
       await p.locator('[data-edit-channels]').click();
       await expect(p.locator('.channel-view.editing .edit-hints')).toBeVisible();
     },
@@ -432,6 +440,7 @@ const M3U_SCREENS: Screen[] = [
     go: async (p) => {
       await p.evaluate(() => localStorage.setItem('iptv_live_preview', 'true'));
       await p.reload();
+      await openChannelList(p);
       await expect(p.locator('.channel-item')).toHaveCount(2);
       await p.locator('.channel-item').first().click();
       await p.locator('#video-player').evaluate((video) => {
@@ -503,9 +512,20 @@ const M3U_SCREENS: Screen[] = [
     name: 'live-locked',
     budget: 0,
     go: async (p) => {
-      await enterTab(p, 'live');
+      await liveList(p);
       await expect(p.locator('#view-channels .group-item .lock-badge.is-locked').first()).toBeVisible();
       await expect(p.locator('#view-channels .channel-item .lock-badge.is-locked').first()).toBeVisible();
+    },
+  },
+  {
+    name: 'live-rails-locked',
+    budget: 0,
+    go: async (p) => {
+      await p.keyboard.press('Escape');
+      await expect(p.locator('#view-channels .live-rails')).toBeVisible();
+      await expect(p.locator('#view-channels .live-rail-title .lock-badge.is-locked, #view-channels .catalog-rail-title .lock-badge.is-locked').first()).toBeVisible();
+      await expect(p.locator('#view-channels .live-card .lock-badge.is-locked').first()).toBeVisible();
+      await openChannelList(p);
     },
   },
   {

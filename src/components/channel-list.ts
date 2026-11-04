@@ -23,7 +23,15 @@ import { StorageService } from '../services/storage-service';
 import { RecentlyWatchedService, type RecentlyWatchedItem } from '../services/recently-watched';
 import { ChannelHealthService } from '../services/channel-health';
 import { groupIcon } from './group-icon';
-import { NAV_HORIZONTAL_ICON, favoriteIcon } from './icons';
+import { NAV_HORIZONTAL_ICON, PLAY_ICON, SEE_ALL_ICON, favoriteIcon } from './icons';
+import { lazySrc } from '../utils/lazy-images';
+import {
+  buildLiveRails,
+  liveCardKey,
+  liveRailItems,
+  parseLiveCardKey,
+  type LiveRail,
+} from './live-browse';
 import { backKey, okHint } from './key-hints';
 import { channelLockBadge, liveGroupLockBadge } from './parental-badge';
 import { showToast } from './toast';
@@ -39,6 +47,11 @@ const CHANNEL_ROW_STRIDE = 96;
 const GROUP_ROW_STRIDE = 72;
 const CHANNEL_OVERSCAN = 12;
 const CHANNEL_VIEWPORT_FALLBACK = 900;
+// A browse rail's stride: the fixed track and card art, plus its three text
+// lines, which grow with the text size (css/channel-list.css .live-rail).
+const RAIL_BASE_STRIDE = 248;
+const RAIL_TEXT_STRIDE = 100;
+const RAIL_OVERSCAN = 1;
 
 function programmeProgress(programme: Programme): number {
   return Math.min(100, Math.max(0,
@@ -52,6 +65,8 @@ type SyncVia = Via | 'render';
 
 let liveList: ChannelList | null = null;
 type ChannelSelectionMode = 'expand-current' | 'fullscreen';
+// Live opens on the browse rails; the list is its "See all" and edit screen.
+export type LiveScreen = 'browse' | 'list';
 
 export interface ChannelListOptions {
   onChannelSelect: (
@@ -68,6 +83,8 @@ export interface ChannelListOptions {
   getPreviewHintState?: () => PreviewHintState;
   onEnterManagement?: () => void;
   authorizeEdit?: (proceed: () => void) => void;
+  // Where Live opens: the browse rails, or the full channel list.
+  initialScreen?: LiveScreen;
 }
 
 export class ChannelList {
@@ -124,6 +141,18 @@ export class ChannelList {
   private groupEntriesPlaylist = '';
   private groupEntriesRevision = -1;
   private groupEntriesLocale: SupportedLocale | null = null;
+  private screen: LiveScreen = 'browse';
+  private rails: LiveRail[] = [];
+  private readonly railVirtualizer = new VirtualList({
+    itemSize: RAIL_BASE_STRIDE + RAIL_TEXT_STRIDE,
+    overscan: RAIL_OVERSCAN,
+    fallbackViewportSize: CHANNEL_VIEWPORT_FALLBACK,
+  });
+  private railScrollFrame: number | null = null;
+  // The browse card the list screen was opened from, to land on again.
+  private browseReturnKey: string | null = null;
+  // Edit mode opened from the browse page closes back to it.
+  private editReturnsToBrowse = false;
 
   private authorizeEdit: (proceed: () => void) => void;
   constructor(
@@ -140,7 +169,9 @@ export class ChannelList {
       getPreviewHintState = () => 'off',
       onEnterManagement = () => {},
       authorizeEdit = proceed => proceed(),
+      initialScreen = 'browse',
     } = options;
+    this.screen = initialScreen;
     this.authorizeEdit = authorizeEdit;
     this.container = container;
     this.onChannelSelect = onChannelSelect;
@@ -156,7 +187,7 @@ export class ChannelList {
       root: () => this.container.closest<HTMLElement>('.view') ?? this.container,
       leaveFor: { up: 'tabbar' },
       defaultKey: () => this.defaultKey(),
-      has: (key) => this.rowPosition(key) !== null,
+      has: (key) => this.rowPosition(key) !== null || this.browseHas(key),
       reveal: (key) => this.reveal(key),
       enterTo: (via) => {
         this.prepareEntry(via);
@@ -235,6 +266,17 @@ export class ChannelList {
     }, true);
     this.container.addEventListener('scroll', (e: Event) => {
       const target = e.target as HTMLElement;
+      if (target.classList.contains('live-rails')) {
+        const offset = this.scrollGuard.readUserOffset(target, 'vertical');
+        if (offset === null) return;
+        this.railVirtualizer.setScrollOffset(offset);
+        if (this.railScrollFrame !== null) return;
+        this.railScrollFrame = requestAnimationFrame(() => {
+          this.railScrollFrame = null;
+          this.render(false);
+        });
+        return;
+      }
       if (target.classList.contains('group-list')) {
         const offset = this.scrollGuard.readUserOffset(target, 'vertical');
         if (offset === null) return;
@@ -280,6 +322,10 @@ export class ChannelList {
   }
 
   render(ensureFocus = true): void {
+    if (this.screen === 'browse' && !this.editor.isEditing) {
+      this.renderBrowse(ensureFocus);
+      return;
+    }
     const scale = Number(document.documentElement.dataset.textSize || '100') / 100;
     this.channelVirtualizer.setItemSize(CHANNEL_ROW_STRIDE + 60 * (scale - 1));
     this.groupVirtualizer.setItemSize(GROUP_ROW_STRIDE + 44 * (scale - 1));
@@ -470,10 +516,511 @@ export class ChannelList {
     if (ensureFocus && showingRecent) this.recentToReveal = this.nav.focused?.dataset.key ?? null;
     this.syncScope(ensureFocus ? 'key' : 'render');
   }
+  // --- browse page ---
+
+  private renderBrowse(ensureFocus: boolean): void {
+    const scale = Number(document.documentElement.dataset.textSize || '100') / 100;
+    this.railVirtualizer.setItemSize(RAIL_BASE_STRIDE + RAIL_TEXT_STRIDE * scale);
+    const tabs = PlaylistService.playlistTabs;
+    if (this.currentPlaylist && !tabs.some(tab => tab.id === this.currentPlaylist)) this.currentPlaylist = '';
+    if (ensureFocus || this.recentItems.length === 0) {
+      this.recentItems = RecentlyWatchedService.getItems(this.currentPlaylist || undefined);
+    }
+    this.rails = buildLiveRails(this.currentPlaylist, this.recentItems);
+    const favs = StorageService.getFavorites();
+    const attached = this.nav.focused && this.container.contains(this.nav.focused)
+      ? this.nav.focused : null;
+    const prevKey = attached?.getAttribute('data-key') ?? null;
+    const previousRails = this.container.querySelector<HTMLElement>('.live-rails');
+    if (previousRails && ensureFocus) this.railVirtualizer.setScrollOffset(previousRails.scrollTop);
+    const viewport = previousRails?.clientHeight || CHANNEL_VIEWPORT_FALLBACK;
+    const focusRail = this.railIndexOf(prevKey);
+    if (ensureFocus && focusRail >= 0) this.railVirtualizer.ensureVisible(focusRail, viewport);
+    const range = this.railVirtualizer.getRange(this.rails.length, viewport);
+    const total = PlaylistService.getGroupCount('builtin:all', this.currentPlaylist || undefined);
+
+    morph(this.container, html`
+      <div class="channel-view live-browse">
+        <div class="live-browse-head" data-nav-container>
+          <div class="live-browse-count">${tp('channel.count', total)}</div>
+          ${tabs.length > 1 ? html`
+            <div class="live-playlist-chips">
+              <button class="series-season-btn live-playlist-chip ${!this.currentPlaylist ? 'active' : ''}"
+                      data-key="tab:" data-focusable data-playlist="">${t('common.all')}</button>
+              ${tabs.map(tab => html`
+                <button class="series-season-btn live-playlist-chip ${tab.id === this.currentPlaylist ? 'active' : ''}"
+                        data-key="tab:${tab.id}" data-focusable data-playlist="${tab.id}">${tab.name}</button>
+              `)}
+            </div>
+          ` : ''}
+          <div class="live-browse-actions">
+            <button class="detail-btn live-browse-btn" data-key="open-list" data-focusable data-live-open-list>
+              <span class="detail-btn-icon">${raw(SEE_ALL_ICON)}</span><span>${t('common.groups')}</span>
+            </button>
+            <button class="detail-btn live-browse-btn live-browse-edit" data-key="edit-channels"
+                    data-focusable data-edit-channels
+                    aria-label="${t('settings.editChannelList')}"
+                    title="${t('settings.editChannelList')}"><img src="assets/icons/pencil.svg" alt=""></button>
+          </div>
+        </div>
+        <div class="live-rails" data-lazy-root>
+          ${this.rails.length ? html`
+            <div class="live-rails-spacer" data-key="live-rails-spacer"
+                 style="height:${this.railVirtualizer.getTotalSize(this.rails.length)}px">
+              ${this.rails.slice(range.start, range.end).map((rail, offset) => this.renderRail(
+                rail,
+                range.start + offset,
+                this.railVirtualizer.getItemOffset(range.start + offset),
+                favs,
+              ))}
+            </div>
+          ` : html`<div class="empty-state">${
+            t(PlaylistService.allSourcesDisabled ? 'channel.noEnabledSources' : 'channel.empty')
+          }</div>`}
+        </div>
+        ${this.renderPreviewHints()}
+      </div>
+    `);
+
+    let target: HTMLElement | null = prevKey ? this.byKey(prevKey) : null;
+    if (!target && ensureFocus && !this.focusScope.focusKey) target = this.browseEntryTarget();
+    if (target) this.nav.focus(target);
+    const rails = this.container.querySelector<HTMLElement>('.live-rails');
+    if (rails) this.scrollGuard.syncOffset(rails, 'vertical', this.railVirtualizer.scrollOffset);
+    if (this.previewFocused) this.ringHidden = true;
+    this.syncScope(ensureFocus ? 'key' : 'render');
+  }
+
+  private renderRail(rail: LiveRail, index: number, top: number, favs: string[]): Safe {
+    const content = liveRailItems(rail, this.currentPlaylist, this.recentItems);
+    const cards: Safe[] = content.kind === 'recent'
+      ? content.items.map((item, position) => this.renderRecentCard(rail, item, position, favs))
+      : content.channels.map(ch => this.renderCard(rail, ch, favs));
+    if (content.total > CONFIG.LIVE_RAIL_ITEMS) {
+      cards.push(html`
+        <div class="catalog-tile live-card catalog-see-all" data-focusable
+             data-key="${liveCardKey(rail.key, 'all')}" data-live-see-all="${rail.group}">
+          <div class="catalog-poster-wrap live-card-art catalog-see-all-card">
+            ${raw(SEE_ALL_ICON)}
+            <div class="catalog-see-all-label">${t('catalog.seeAll')}</div>
+            <div class="catalog-see-all-count">${tp('channel.count', content.total)}</div>
+          </div>
+        </div>
+      `);
+    }
+    return html`
+      <div class="catalog-rail live-rail" data-key="${liveCardKey(rail.key, 'rail')}"
+           data-rail-key="${rail.key}" data-rail-index="${index}" style="top:${top}px">
+        <h2 class="catalog-rail-title">${rail.kind === 'group'
+          ? raw(liveGroupLockBadge(rail.group, this.currentPlaylist)) : ''}${rail.title}</h2>
+        <div class="catalog-rail-track" data-lazy-root>${cards}</div>
+      </div>
+    `;
+  }
+
+  // `recentIndex` marks a Recently Watched live entry, which OK replays as one.
+  private renderCard(rail: LiveRail, ch: Channel, favs: string[], recentIndex?: number): Safe {
+    const globalIdx = PlaylistService.indexOf(ch);
+    const epgId = EpgService.findChannelId(ch);
+    const programme = epgId ? EpgService.getNowPlaying(epgId) : null;
+    const playing = globalIdx === this.playingIndex && this.playingCatchupStart === null;
+    const favorite = rail.kind !== 'favorites' && favs.includes(channelKey(ch));
+    const itemKey = recentIndex === undefined
+      ? `ch:${String(globalIdx)}`
+      : `recent:live:${channelKey(ch)}`;
+    return html`
+      <div class="catalog-tile live-card ${recentIndex === undefined ? '' : 'recent-live'} ${playing ? 'playing' : ''}"
+           data-key="${liveCardKey(rail.key, itemKey)}"
+           data-focusable data-channel-index="${globalIdx}"
+           ${recentIndex === undefined ? '' : html`data-recent-index="${recentIndex}"`}>
+        <div class="catalog-poster-wrap live-card-art">
+          ${this.renderCardLogo(ch)}
+          <span class="live-card-num">${globalIdx + 1}</span>
+          ${this.renderCardStatus(ch, favorite, playing)}
+          ${programme ? html`
+            <div class="catalog-tile-progress channel-progress" aria-hidden="true"
+                 data-programme-start="${programme.start.getTime()}"><div class="catalog-tile-progress-fill" style="width:${programmeProgress(programme)}%"></div></div>
+          ` : ''}
+        </div>
+        <div class="catalog-tile-name">${raw(channelLockBadge(ch))}${ch.name}</div>
+        <div class="catalog-tile-episode">${programme ? programme.title : ''}</div>
+      </div>
+    `;
+  }
+
+  private renderRecentCard(
+    rail: LiveRail,
+    item: RecentlyWatchedItem,
+    index: number,
+    favs: string[],
+  ): Safe {
+    if (item.kind === 'live') return this.renderCard(rail, item.channel, favs, index);
+    const duration = item.progress.duration > 0
+      ? item.progress.duration
+      : Math.max(1, (item.progress.progEnd - item.progress.progStart) / 1000);
+    const percent = Math.round(Math.max(0, Math.min(1, item.progress.position / duration)) * 100);
+    const playing = item.channelIndex === this.playingIndex
+      && this.playingCatchupStart === item.progress.progStart;
+    const favorite = favs.includes(channelKey(item.channel));
+    return html`
+      <div class="catalog-tile live-card recent-catchup ${playing ? 'playing' : ''}"
+           data-key="${liveCardKey(rail.key, `recent:catchup:${channelKey(item.channel)}:${item.progress.progStart}`)}"
+           data-focusable data-recent-index="${index}" data-channel-index="${item.channelIndex}">
+        <div class="catalog-poster-wrap live-card-art">
+          ${this.renderCardLogo(item.channel)}
+          <span class="live-card-num live-card-catchup">${t('common.catchup')}</span>
+          ${this.renderCardStatus(item.channel, favorite, playing)}
+          <div class="catalog-tile-progress" aria-hidden="true"><div class="catalog-tile-progress-fill" style="width:${percent}%"></div></div>
+        </div>
+        <div class="catalog-tile-name">${raw(channelLockBadge(item.channel))}${item.progress.title ?? ''}</div>
+        <div class="catalog-tile-episode">${t('channel.resumeAt', {
+          channel: item.channel.name,
+          position: formatPosition(item.progress.position),
+        })}</div>
+      </div>
+    `;
+  }
+
+  private renderCardLogo(ch: Channel): Safe {
+    if (ch.logo && !this.failedLogos.has(ch.logo)) {
+      return html`<img class="channel-logo live-card-logo" ${lazySrc(ch.logo)} alt="">`;
+    }
+    return html`<span class="live-card-initial">${ch.name.charAt(0)}</span>`;
+  }
+
+  // Health, favorite, and playing marks share the art's top-right corner.
+  private renderCardStatus(ch: Channel, favorite: boolean, playing: boolean): Safe {
+    return html`
+      <span class="live-card-status">
+        ${this.renderHealth(ch)}
+        ${favorite ? html`<span class="live-card-favorite">${raw(favoriteIcon(true))}</span>` : ''}
+        ${playing ? html`<span class="live-card-playing">${raw(PLAY_ICON)}</span>` : ''}
+      </span>
+    `;
+  }
+
+  private byKey(key: string): HTMLElement | null {
+    return this.container.querySelector<HTMLElement>(`[data-key="${attrSelectorEscape(key)}"]`);
+  }
+
+  private railIndexOf(key: string | null): number {
+    const parsed = parseLiveCardKey(key);
+    if (!parsed) return -1;
+    for (let i = 0; i < this.rails.length; i++) {
+      if (this.rails[i].key === parsed.rail) return i;
+    }
+    return -1;
+  }
+
+  // A card key the rails hold, rendered or scrolled away.
+  private browseHas(key: string): boolean {
+    if (this.screen !== 'browse') return false;
+    const parsed = parseLiveCardKey(key);
+    const index = this.railIndexOf(key);
+    if (!parsed || index < 0) return false;
+    return this.railItemKeys(this.rails[index]).indexOf(parsed.item) >= 0;
+  }
+
+  private railItemKeys(rail: LiveRail): string[] {
+    const content = liveRailItems(rail, this.currentPlaylist, this.recentItems);
+    const keys = content.kind === 'recent'
+      ? content.items.map(item => (item.kind === 'live'
+        ? `recent:live:${channelKey(item.channel)}`
+        : `recent:catchup:${channelKey(item.channel)}:${item.progress.progStart}`))
+      : content.channels.map(ch => `ch:${String(PlaylistService.indexOf(ch))}`);
+    if (content.total > CONFIG.LIVE_RAIL_ITEMS) keys.push('all');
+    return keys;
+  }
+
+  private browseEntryTarget(): HTMLElement | null {
+    return this.container.querySelector<HTMLElement>('.live-rails [data-focusable]')
+      ?? this.container.querySelector<HTMLElement>('.live-browse-head [data-focusable]');
+  }
+
+  // Brings a rail into the rendered window and fully into view.
+  private showRail(index: number): HTMLElement | null {
+    const scroller = this.container.querySelector<HTMLElement>('.live-rails');
+    const viewport = scroller?.clientHeight || CHANNEL_VIEWPORT_FALLBACK;
+    const selector = `.live-rail[data-rail-index="${String(index)}"]`;
+    let rail = this.container.querySelector<HTMLElement>(selector);
+    if (!rail || this.railScrollFrame !== null || this.railVisibility(rail) !== 'full') {
+      this.railVirtualizer.ensureVisible(index, viewport);
+      if (scroller) this.scrollGuard.syncOffset(scroller, 'vertical', this.railVirtualizer.scrollOffset);
+      this.render(false);
+      rail = this.container.querySelector<HTMLElement>(selector);
+    }
+    return rail;
+  }
+
+  private railVisibility(rail: HTMLElement): 'full' | 'partial' | 'none' {
+    const scroller = rail.closest<HTMLElement>('.live-rails');
+    if (!scroller) return 'none';
+    const view = this.listViewport(scroller, 'channel');
+    if (view.bottom <= view.top) return 'full';
+    const box = rail.getBoundingClientRect();
+    if (box.top >= view.top - 1 && box.bottom <= view.bottom + 1) return 'full';
+    return box.bottom > view.top && box.top < view.bottom ? 'partial' : 'none';
+  }
+
+  // Scrolls the card's track so the card and its ring gutter are in view.
+  private revealCard(card: HTMLElement): void {
+    const track = card.parentElement;
+    if (!track || !track.classList.contains('catalog-rail-track')) return;
+    const gutter = 24;
+    const box = track.getBoundingClientRect();
+    const r = card.getBoundingClientRect();
+    let delta = 0;
+    if (r.left - gutter < box.left) delta = r.left - gutter - box.left;
+    else if (r.right + gutter > box.right) delta = r.right + gutter - box.right;
+    if (Math.abs(delta) >= 1) track.scrollLeft += delta;
+  }
+
+  private focusCard(card: HTMLElement): void {
+    this.revealCard(card);
+    this.nav.focus(card);
+  }
+
+  private revealBrowseKey(key: string): boolean {
+    const index = this.railIndexOf(key);
+    if (index < 0) {
+      const el = this.byKey(key);
+      if (!el || !el.hasAttribute('data-focusable')) return false;
+      this.nav.focus(el);
+      return true;
+    }
+    const rail = this.showRail(index);
+    const card = rail ? this.byKey(key) : null;
+    if (!card) return false;
+    this.focusCard(card);
+    return true;
+  }
+
+  // The first rail holding the channel, which is how the browse page shows
+  // the channel playing.
+  private revealBrowseChannel(globalIdx: number): boolean {
+    const itemKey = `ch:${String(globalIdx)}`;
+    for (let i = 0; i < this.rails.length; i++) {
+      const keys = this.railItemKeys(this.rails[i]);
+      const channel = PlaylistService.getByIndex(globalIdx);
+      const recentKey = channel ? `recent:live:${channelKey(channel)}` : '';
+      const item = keys.indexOf(itemKey) >= 0 ? itemKey : keys.indexOf(recentKey) >= 0 ? recentKey : null;
+      if (item && this.revealBrowseKey(liveCardKey(this.rails[i].key, item))) return true;
+    }
+    return false;
+  }
+
+  // A rail the wheel scrolled away resumes on the nearest rail in view, as
+  // the list resumes on its nearest row, rather than scrolling back to it.
+  private resumeBrowseInView(): boolean {
+    const key = this.focusScope.focusKey;
+    const index = this.railIndexOf(key);
+    if (index < 0 || this.railScrollFrame !== null) return false;
+    const focused = this.nav.focused;
+    const rail = focused && this.container.contains(focused)
+      ? focused.closest<HTMLElement>('.live-rail') : null;
+    if (rail && this.railVisibility(rail) !== 'none') return false;
+    let best: HTMLElement | null = null;
+    let bestDistance = Infinity;
+    for (const candidate of Array.from(this.container.querySelectorAll<HTMLElement>('.live-rail'))) {
+      if (this.railVisibility(candidate) !== 'full') continue;
+      const distance = Math.abs(parseInt(candidate.dataset.railIndex ?? '', 10) - index);
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+    const target = best ? this.nearestCard(best, null) : null;
+    if (!target) return false;
+    this.focusCard(target);
+    if (target.dataset.key) {
+      this.focusScope.resume(target.dataset.key, bestDistance, 'list=rails', 'target=nearest');
+    }
+    return true;
+  }
+
+  // The card in `rail` nearest the horizontal center of `from`.
+  private nearestCard(rail: HTMLElement, from: HTMLElement | null): HTMLElement | null {
+    const cards = Array.from(rail.querySelectorAll<HTMLElement>('[data-focusable]'));
+    if (!from) return cards[0] ?? null;
+    return nearestByCenter(cards, from);
+  }
+
+  // The focused browse item, re-rendered into view when the wheel windowed it away.
+  private browseFocused(): HTMLElement | null {
+    const focused = this.nav.focused;
+    if (focused && this.container.contains(focused)) return focused;
+    const key = this.focusScope.focusKey;
+    if (key !== null && this.revealBrowseKey(key)) return this.nav.focused;
+    return null;
+  }
+
+  private dispatchBrowse(action: Action, event?: NumberEvent): boolean {
+    if (isFocusMove(action, true)) {
+      if (this.previewFocused || KeyHandler.isWheelAction()) this.ringHidden = false;
+      if (!this.previewFocused && (this.resumeBrowseInView() || this.revealRing())) return true;
+    } else if ((action === 'select' || action === 'green') && this.resumeBrowseInView()) {
+      return true;
+    }
+    switch (action) {
+      case 'up':
+      case 'channel_up':
+        return this.moveBrowseVertical(-1);
+      case 'down':
+      case 'channel_down':
+        return this.moveBrowseVertical(1);
+      case 'left':
+      case 'right':
+        return this.moveBrowseHorizontal(action);
+      case 'select':
+        this.selectBrowse();
+        return false;
+      case 'green': {
+        const focused = this.browseFocused();
+        if (focused?.dataset.channelIndex !== undefined) this.editor.toggleFocusedFavorite();
+        return false;
+      }
+      case 'yellow':
+        this.enterEditMode();
+        return false;
+      case 'number': {
+        if (!event) return false;
+        const num = event.number - 1;
+        const channel = PlaylistService.getByIndex(num);
+        if (!channel) return false;
+        const inPlaylist = !this.currentPlaylist || channel.playlistIds.includes(this.currentPlaylist);
+        this.markPlaying(num);
+        this.onChannelSelect(num, undefined, {
+          group: 'builtin:all',
+          playlist: inPlaylist ? this.currentPlaylist || undefined : undefined,
+        }, 'fullscreen');
+        return false;
+      }
+    }
+    return false;
+  }
+
+  // Up and Down step a rail at a time, landing on the card nearest the one
+  // left; Up off the first rail reaches the head row, and off that the tab bar.
+  private moveBrowseVertical(delta: number): boolean {
+    const focused = this.browseFocused();
+    if (!focused) return false;
+    const head = focused.closest('.live-browse-head');
+    if (head) {
+      if (delta < 0) return false;
+      const rail = this.rails.length ? this.showRail(0) : null;
+      const target = rail ? this.nearestCard(rail, this.byKey(focused.dataset.key ?? '')) : null;
+      if (target) this.focusCard(target);
+      return true;
+    }
+    const index = parseInt(focused.closest<HTMLElement>('.live-rail')?.dataset.railIndex ?? '', 10);
+    if (isNaN(index)) return false;
+    const next = index + delta;
+    if (next < 0) {
+      const target = this.nearestHead(focused);
+      if (target) this.nav.focus(target);
+      return !!target;
+    }
+    if (next >= this.rails.length) return true;
+    const key = focused.dataset.key ?? '';
+    const rail = this.showRail(next);
+    const from = this.byKey(key);
+    const target = rail ? this.nearestCard(rail, from) : null;
+    if (target) this.focusCard(target);
+    return true;
+  }
+
+  private nearestHead(from: HTMLElement): HTMLElement | null {
+    return nearestByCenter(Array.from(
+      this.container.querySelectorAll<HTMLElement>('.live-browse-head [data-focusable]'),
+    ), from);
+  }
+
+  // Left and Right walk a rail or the head row in order and stop at the
+  // ends; Right off a rail's end reaches the live preview's controls.
+  private moveBrowseHorizontal(action: 'left' | 'right'): boolean {
+    const focused = this.browseFocused();
+    if (!focused) return false;
+    const row = focused.closest<HTMLElement>('.catalog-rail-track, .live-browse-head');
+    if (!row) return false;
+    const items = Array.from(row.querySelectorAll<HTMLElement>('[data-focusable]'));
+    const next = items[items.indexOf(focused) + (action === 'left' ? -1 : 1)];
+    if (next) {
+      this.focusCard(next);
+      return true;
+    }
+    if (action === 'right' && row.classList.contains('catalog-rail-track')) this.onEnterPreview();
+    return true;
+  }
+
+  private selectBrowse(): void {
+    const focused = this.nav.focused;
+    if (!focused || !this.container.contains(focused)) return;
+    if (focused.dataset.editChannels !== undefined) {
+      this.enterEditMode();
+    } else if (focused.dataset.liveOpenList !== undefined) {
+      this.openList('builtin:all');
+    } else if (focused.dataset.liveSeeAll !== undefined) {
+      this.openList(focused.dataset.liveSeeAll as ChannelGroupId);
+    } else if (focused.dataset.playlist !== undefined) {
+      this.currentPlaylist = focused.dataset.playlist;
+      this.currentGroup = 'builtin:all';
+      this.render();
+    } else if (focused.dataset.recentIndex !== undefined) {
+      const item = this.recentItems[parseInt(focused.dataset.recentIndex, 10)];
+      if (item?.kind === 'live') {
+        this.markPlaying(item.channelIndex);
+        this.onChannelSelect(item.channelIndex, undefined, this.cardScope(focused), 'expand-current');
+      } else if (item) {
+        void this.playRecentCatchup(item);
+      }
+    } else if (focused.dataset.channelIndex !== undefined) {
+      const idx = parseInt(focused.dataset.channelIndex, 10);
+      this.markPlaying(idx);
+      this.onChannelSelect(idx, undefined, this.cardScope(focused), 'expand-current');
+    }
+  }
+
+  // A card plays within its rail's group, so Channel Up/Down walk that rail.
+  private cardScope(card: HTMLElement): ChannelScope {
+    const index = this.railIndexOf(card.dataset.key ?? null);
+    const group = index >= 0 ? this.rails[index].group : 'builtin:all';
+    return { group, playlist: this.currentPlaylist || undefined };
+  }
+
+  /** Opens the full channel list on `group`, the browse page's "See all". */
+  openList(group: ChannelGroupId = 'builtin:all'): void {
+    if (this.screen === 'browse') this.browseReturnKey = this.focusScope.focusKey;
+    this.screen = 'list';
+    this.currentGroup = group;
+    this.channelVirtualizer.setScrollOffset(0);
+    this.groupVirtualizer.setScrollOffset(0);
+    this.render();
+  }
+
+  get showingBrowse(): boolean {
+    return this.screen === 'browse' && !this.editor.isEditing;
+  }
+
+  private returnToBrowse(): void {
+    const key = this.browseReturnKey;
+    this.browseReturnKey = null;
+    this.editReturnsToBrowse = false;
+    this.screen = 'browse';
+    this.currentGroup = 'builtin:all';
+    this.render(false);
+    if (!(key !== null && this.revealBrowseKey(key))) {
+      const entry = this.browseEntryTarget();
+      if (entry) this.focusCard(entry);
+    }
+    this.syncScope('key');
+  }
+
   refreshNowPlaying(): void {
     if (this.editor.isChannelEditing || this.editor.isManagingFavorites) return;
     let changed = false;
-    this.container.querySelectorAll<HTMLElement>('.channel-item[data-channel-index]:not(.recent-catchup)')
+    this.container.querySelectorAll<HTMLElement>(
+      '.channel-item[data-channel-index]:not(.recent-catchup), .live-card[data-channel-index]:not(.recent-catchup)',
+    )
       .forEach(row => {
         if (changed) return;
         const channel = PlaylistService.channels[Number(row.dataset.channelIndex)];
@@ -617,16 +1164,37 @@ export class ChannelList {
   }
 
   enterEditMode(group: ChannelGroupId = this.currentGroup): void {
-    this.authorizeEdit(() => this.editor.enterEditMode(group));
+    this.authorizeEdit(() => {
+      let target = group;
+      if (this.showingBrowse) {
+        // Edit mode works on the list screen and closes back to the rails.
+        this.browseReturnKey = this.focusScope.focusKey;
+        this.editReturnsToBrowse = true;
+        this.screen = 'list';
+        target = 'builtin:all';
+        this.currentGroup = target;
+      }
+      this.editor.enterEditMode(target);
+    });
   }
 
   exitEditMode(): void {
     this.editor.exitEditMode();
+    if (this.editReturnsToBrowse && !this.editor.isEditing) this.returnToBrowse();
   }
 
-  /** Back inside the channel list: close what is open, else let the view handle it. */
+  /** Back inside Live: close what is open, then the list screen; else let the view handle it. */
   handleBack(): boolean {
-    return this.editor.handleBack();
+    const wasEditing = this.editor.isChannelEditing;
+    if (this.editor.handleBack()) {
+      if (wasEditing && !this.editor.isEditing && this.editReturnsToBrowse) this.returnToBrowse();
+      return true;
+    }
+    if (this.screen === 'list') {
+      this.returnToBrowse();
+      return true;
+    }
+    return false;
   }
 
   handleAction(action: Action, event?: NumberEvent): boolean {
@@ -636,6 +1204,7 @@ export class ChannelList {
   }
 
   private dispatchAction(action: Action, event?: NumberEvent): boolean {
+    if (this.showingBrowse) return this.dispatchBrowse(action, event);
     // Before the editor too: it applies these to whichever row holds focus.
     // Up also precedes the row-0 hand-off to the tab bar; Down would move a grabbed row.
     const resumeFirst = action === 'select' || action === 'left' || action === 'right'
@@ -913,6 +1482,10 @@ export class ChannelList {
   // Back and the bar resume where focus was left; a channel tuned elsewhere
   // meanwhile wins. Any other entry starts at the playing channel or the top.
   private placeEntry(via: Via): void {
+    if (this.showingBrowse) {
+      this.placeBrowseEntry(via);
+      return;
+    }
     const moved = this.playingMoved;
     this.playingMoved = false;
     const resume = via === 'back' || via === 'resume';
@@ -923,6 +1496,21 @@ export class ChannelList {
     if (playing >= 0 && this.revealChannel(playing)) return;
     const entry = this.container.querySelector<HTMLElement>('.channel-main [data-channel-index]');
     if (entry) this.nav.focus(entry);
+    else this.nav.focusFirst();
+  }
+
+  private placeBrowseEntry(via: Via): void {
+    const moved = this.playingMoved;
+    this.playingMoved = false;
+    const resume = via === 'back' || via === 'resume';
+    const playing = this.playingIndex;
+    if ((!resume || moved) && playing >= 0 && this.revealBrowseChannel(playing)) return;
+    const key = this.focusScope.focusKey;
+    if (resume && key !== null && this.revealBrowseKey(key)) return;
+    if (playing >= 0 && this.revealBrowseChannel(playing)) return;
+    const rail = this.rails.length ? this.showRail(0) : null;
+    const entry = rail?.querySelector<HTMLElement>('[data-focusable]') ?? this.browseEntryTarget();
+    if (entry) this.focusCard(entry);
     else this.nav.focusFirst();
   }
 
@@ -973,6 +1561,8 @@ export class ChannelList {
   // back: virtual rows are kept in view by the list, and a Recently Watched
   // row only by the list's own re-render or re-entry.
   private reveal(key: string): boolean | null {
+    // A browse card is brought into view before it is focused.
+    if (parseLiveCardKey(key)) return null;
     if (this.recentToReveal === key) {
       this.recentToReveal = null;
       return false;
@@ -983,6 +1573,7 @@ export class ChannelList {
   private defaultKey(): string | null {
     const focused = this.nav.focused;
     if (focused && this.container.contains(focused) && focused.dataset.key) return focused.dataset.key;
+    if (this.showingBrowse) return this.browseEntryTarget()?.dataset.key ?? null;
     const playing = this.playingIndex >= 0
       ? this.container.querySelector<HTMLElement>(
         `.channel-main [data-channel-index="${String(this.playingIndex)}"]`)
@@ -1299,6 +1890,23 @@ export class ChannelList {
     return this.groupEntries;
   }
 
+}
+
+// The candidate whose horizontal center is nearest `from`'s.
+function nearestByCenter(candidates: HTMLElement[], from: HTMLElement): HTMLElement | null {
+  const box = from.getBoundingClientRect();
+  const center = box.left + box.width / 2;
+  let best: HTMLElement | null = null;
+  let bestDistance = Infinity;
+  for (const candidate of candidates) {
+    const r = candidate.getBoundingClientRect();
+    const distance = Math.abs(r.left + r.width / 2 - center);
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }
 
 // Escape a value for use inside a `[attr="..."]` selector. Only `\` and `"`

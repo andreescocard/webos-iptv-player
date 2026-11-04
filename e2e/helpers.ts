@@ -97,6 +97,22 @@ export async function seedPlaylist(page: Page, url = PLAYLIST_URL): Promise<void
   }, url);
 }
 
+/** Live opens on the browse rails; open the full channel list (sidebar of
+ *  groups + virtual list) from the head row's Groups button. The click carries
+ *  coordinates for the list's hit-test but does not move the mouse, so the
+ *  test stays in keys mode. */
+export async function openChannelList(page: Page): Promise<void> {
+  const button = page.locator('#view-channels [data-live-open-list]');
+  await expect(button).toBeVisible();
+  await button.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    el.dispatchEvent(new MouseEvent('click', {
+      clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, bubbles: true,
+    }));
+  });
+  await expect(page.locator('#view-channels .channel-main')).toBeVisible();
+}
+
 /** Enter a section via the docked tab bar (always visible for an Xtream account).
  *  Uses a coordinate mouse press so the click carries clientX/clientY for the tab
  *  bar's coordinate hit-test. */

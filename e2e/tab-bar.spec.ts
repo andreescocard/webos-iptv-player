@@ -359,7 +359,7 @@ test.describe('a pointer click on a section tab', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    const rows = page.locator('#view-channels .channel-main [data-channel-index]');
+    const rows = page.locator('#view-channels .live-card');
     await expect(rows.nth(1)).toBeVisible();
     await pointAt(page, rows.nth(1));
     await expect(rows.nth(1)).toHaveClass(/\bfocused\b/);
@@ -394,8 +394,8 @@ test.describe('a pointer click on a section tab', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    const rows = page.locator('#view-channels .channel-main [data-channel-index]');
-    const edit = page.locator('#view-channels .channel-edit-btn');
+    const rows = page.locator('#view-channels .live-card');
+    const edit = page.locator('#view-channels [data-edit-channels]');
     await expect(rows.first()).toBeVisible();
     await pointAt(page, edit);
     await expect(edit).toHaveClass(/\bfocused\b/);
@@ -411,7 +411,7 @@ test.describe('a pointer click on a section tab', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    await expect(page.locator('#view-channels .channel-item').first()).toBeVisible();
+    await expect(page.locator('#view-channels .live-card').first()).toBeVisible();
 
     await enterTab(page, 'epg');
     await expect(page.locator('#view-epg .epg-channel-item').first()).toBeVisible();
@@ -426,7 +426,7 @@ test.describe('a pointer click on a section tab', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    await expect(page.locator('#view-channels .channel-item').first()).toBeVisible();
+    await expect(page.locator('#view-channels .live-card').first()).toBeVisible();
 
     await enterTab(page, 'settings');
     const first = page.locator('#view-settings .settings-nav-item').first();
@@ -442,17 +442,17 @@ test.describe('a pointer click on a section tab', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    const rows = page.locator('#view-channels .channel-main [data-channel-index]');
+    const rows = page.locator('#view-channels .live-card');
     await expect(rows.first()).toBeVisible();
 
     await enterTab(page, 'live');
     await expect(page.locator('#view-channels .focused')).toHaveCount(0);
     await pressGreen(page);
     await expect(rows.first()).toHaveClass(/\bfocused\b/);
-    await expect(page.locator('#view-channels .favorite-glyph')).toHaveCount(0);
+    await expect(page.locator('#view-channels .live-card-favorite')).toHaveCount(0);
 
     await pressGreen(page);
-    await expect(rows.first().locator('.favorite-glyph')).toBeVisible();
+    await expect(page.locator('#view-channels .live-card-favorite').first()).toBeVisible();
   });
 });
 
@@ -478,9 +478,10 @@ test.describe('hovering content after D-pad Up onto the tab bar', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    const rows = page.locator('#view-channels .channel-main [data-channel-index]');
+    const rows = page.locator('#view-channels .live-card');
     await expect(rows.first()).toHaveClass(/\bfocused\b/);
 
+    await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowUp');
     await expect(page.locator('.tab-bar-item[data-section="live"].focused')).toHaveCount(1);
 
@@ -505,9 +506,10 @@ test.describe('hovering content after D-pad Up onto the tab bar', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    await expect(page.locator('#view-channels .channel-item').first()).toBeVisible();
+    await expect(page.locator('#view-channels .live-card').first()).toBeVisible();
 
-    // Up onto Live, then Right along the bar to Settings.
+    // Two Ups (head row, then the bar) onto Live, then Right along the bar to Settings.
+    await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowUp');
     for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight');
     await expect(page.locator('.tab-bar-item[data-section="settings"].focused')).toHaveCount(1);
@@ -532,7 +534,7 @@ test.describe('D-pad Up in Settings', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    await expect(page.locator('#view-channels .channel-item').first()).toBeVisible();
+    await expect(page.locator('#view-channels .live-card').first()).toBeVisible();
     await enterTab(page, 'settings');
     const first = page.locator('#view-settings .settings-nav-item').first();
     await page.keyboard.press('ArrowDown');
@@ -586,7 +588,7 @@ test.describe('the Guide channel column under the pointer', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    await expect(page.locator('#view-channels .channel-item').first()).toBeVisible();
+    await expect(page.locator('#view-channels .live-card').first()).toBeVisible();
 
     await enterTab(page, 'epg');
     const channels = page.locator('#view-epg .epg-channel-item');
@@ -605,8 +607,9 @@ test.describe('the Guide channel column under the pointer', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    await expect(page.locator('#view-channels .channel-item').first()).toHaveClass(/\bfocused\b/);
+    await expect(page.locator('#view-channels .live-card').first()).toHaveClass(/\bfocused\b/);
 
+    await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowRight');
     await expect(page.locator('.tab-bar-item[data-section="epg"].focused')).toHaveCount(1);
@@ -632,7 +635,7 @@ test('Up to the tab bar and back keeps unsaved Settings and their position', asy
   await seedXtream(page);
   await routeLiveManifest(page);
   await page.goto('/');
-  await expect(page.locator('#view-channels .channel-item').first()).toBeVisible();
+  await expect(page.locator('#view-channels .live-card').first()).toBeVisible();
   await enterTab(page, 'settings');
 
   const active = page.locator('#auto-play .toggle-option.active');
@@ -665,7 +668,7 @@ test('a channel number that lands while the bar owns the keys still clears its r
   await seedXtream(page);
   await routeLiveManifest(page);
   await page.goto('/');
-  await expect(page.locator('#view-channels .channel-main [data-channel-index]').first()).toBeVisible();
+  await expect(page.locator('#view-channels .live-card').first()).toBeVisible();
   const committed = page.waitForEvent('console', (m) => m.text().includes('event=key.number '));
   await page.keyboard.press('2');
   await expect(page.locator('.number-entry')).toHaveClass(/\bvisible\b/);
@@ -681,7 +684,7 @@ test.describe('switching sections from the bar with the D-pad', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    const rows = page.locator('#view-channels .channel-main [data-channel-index]');
+    const rows = page.locator('#view-channels .live-card');
     await expect(rows.first()).toBeVisible();
     await page.keyboard.press('ArrowDown');
     await expect(rows.nth(1)).toHaveClass(/\bfocused\b/);
@@ -709,8 +712,9 @@ test.describe('switching sections from the bar with the D-pad', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    const rows = page.locator('#view-channels .channel-main [data-channel-index]');
+    const rows = page.locator('#view-channels .live-card');
     await expect(rows.first()).toBeVisible();
+    await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowUp');
     await expect(page.locator('.tab-bar-item[data-section="live"]')).toHaveClass(/\bfocused\b/);
 
@@ -728,7 +732,8 @@ test.describe('switching sections from the bar with the D-pad', () => {
     await seedXtream(page);
     await routeLiveManifest(page);
     await page.goto('/');
-    await expect(page.locator('#view-channels .channel-item').first()).toBeVisible();
+    await expect(page.locator('#view-channels .live-card').first()).toBeVisible();
+    await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowUp');
     for (let i = 0; i < 6 && !(await page.locator('.tab-bar-item[data-section="search"].focused').count()); i++) {
       await page.keyboard.press('ArrowRight');
@@ -752,7 +757,8 @@ test.describe('switching sections from the bar with the D-pad', () => {
 
 test('a hover on the Guide under its open group menu hands the bar\'s keys back without moving the grid', async ({ page }) => {
   const stamp = (ms: number) => new Date(ms).toISOString().replace(/[-:T]/g, '').slice(0, 14) + ' +0000';
-  const now = Date.now();
+  // Anchored to local midnight so the shows stay on one Guide day at any hour.
+  const now = new Date().setHours(0, 0, 0, 0) + 3_600_000;
   const hour = 3_600_000;
   const xmltv = `<?xml version="1.0" encoding="UTF-8"?><tv>
 <channel id="one"><display-name>Channel One</display-name></channel>
@@ -796,7 +802,8 @@ test('a hover on the Guide under its open group menu hands the bar\'s keys back 
 
 test('a hover under the account menu stays out of the Guide while its group menu is open', async ({ page }) => {
   const stamp = (ms: number) => new Date(ms).toISOString().replace(/[-:T]/g, '').slice(0, 14) + ' +0000';
-  const now = Date.now();
+  // Anchored to local midnight so the shows stay on one Guide day at any hour.
+  const now = new Date().setHours(0, 0, 0, 0) + 3_600_000;
   const hour = 3_600_000;
   const xmltv = `<?xml version="1.0" encoding="UTF-8"?><tv>
 <channel id="one"><display-name>Channel One</display-name></channel>

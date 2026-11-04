@@ -6,6 +6,7 @@ import {
   readUserDataStore,
   SEARCH_M3U,
   enterTab,
+  openChannelList,
   type Page,
 } from './helpers';
 
@@ -46,6 +47,7 @@ async function boot(page: Page): Promise<void> {
   await seedPlaylist(page);
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
+  await openChannelList(page);
   await expect(page.locator('.channel-main .channel-item')).toHaveCount(4);
   // Seed the pointer: before its first move, a mouseover can't be told
   // from content sliding under it, so it is ignored after a key.
@@ -78,6 +80,7 @@ test('the edit toolbar fits every locale with both EPG actions', async ({ page }
     }, locale);
     await page.reload();
     await expect(page.locator('#view-channels')).toBeVisible();
+    await openChannelList(page);
     await key(page, YELLOW);
 
     const layout = await page.locator('.edit-hints').evaluate((toolbar) => {
@@ -125,6 +128,8 @@ test('grab and move reorders a channel, and the order survives a reload', async 
 
   await page.reload();
   await expect(page.locator('#view-channels')).toBeVisible();
+
+  await openChannelList(page);
   expect(await names(page)).toEqual(['Delta Sports', 'Alpha News', 'Beta News', 'Alpha Movies']);
   // Channel numbers follow the custom order.
   await expect(page.locator('.channel-main .channel-item').first()).toContainText('1');
@@ -153,6 +158,8 @@ test('green hides a channel in edit mode and toggles a favorite outside it', asy
 
   await page.reload();
   await expect(page.locator('#view-channels')).toBeVisible();
+
+  await openChannelList(page);
   await expect(page.locator('.channel-main .channel-item')).toHaveCount(3);
 });
 
@@ -189,6 +196,7 @@ test('a pointer drag lands above the row it reaches after the grabbed row scroll
   await routePlaylist(page, lines.join('\n'));
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   const main = page.locator('#view-channels .channel-main');
   const row = (position: number) => main.locator(`[data-list-position="${String(position)}"]`);
   await expect(row(0)).toBeVisible();
@@ -298,6 +306,8 @@ test('blue renames a channel, and an empty rename restores the source name', asy
 
   await page.reload();
   await expect(page.locator('#view-channels')).toBeVisible();
+
+  await openChannelList(page);
   await expect(page.locator('.channel-main .channel-name').first()).toHaveText('My Channel');
 
   await key(page, YELLOW);
@@ -370,6 +380,7 @@ ${guideChannels}
   await page.goto('/');
   await guideResponse;
   await expect(page.locator('#view-channels')).toBeVisible();
+  await openChannelList(page);
   await expect(page.locator('.channel-main .channel-item')).toHaveCount(4);
 
   await key(page, YELLOW);
@@ -448,6 +459,8 @@ ${guideChannels}
 
   await page.reload();
   await expect(page.locator('#view-channels')).toBeVisible();
+
+  await openChannelList(page);
   await key(page, YELLOW);
   await focusChannel(page, 0);
   await key(page, ENTER);
@@ -468,6 +481,7 @@ ${guideChannels}
     }, locale);
     await page.reload();
     await expect(page.locator('#view-channels')).toBeVisible();
+    await openChannelList(page);
     await key(page, YELLOW);
     await focusChannel(page, 0);
     await key(page, ENTER);

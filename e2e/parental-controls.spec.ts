@@ -2,6 +2,7 @@ import {
   test,
   expect,
   enterTab,
+  openChannelList,
   isChromium53,
   neuterVideo,
   readUserDataStore,
@@ -10,6 +11,15 @@ import {
   seedPlaylist,
 } from './helpers';
 import type { Page } from '@playwright/test';
+
+async function enterLiveList(page: Page): Promise<void> {
+  await enterTab(page, 'live');
+  await showList(page);
+}
+
+async function showList(page: Page): Promise<void> {
+  if (!await page.locator('#view-channels .channel-main').isVisible()) await openChannelList(page);
+}
 
 async function openManagerWithNewPin(page: Page): Promise<void> {
   await neuterVideo(page);
@@ -146,7 +156,7 @@ test('protects a live group and unlocks deferred playback with the PIN', async (
   await expect(news).toContainText('Locked');
 
   await leaveLocked(page);
-  await enterTab(page, 'live');
+  await enterLiveList(page);
   await page.locator('.channel-main .channel-item').first().click();
 
   await expect(prompt).toBeVisible();
@@ -182,6 +192,7 @@ test('a source added after turning on stays locked until the manager opens it', 
   const prompt = page.locator('.parental-pin-prompt');
   const channel = (name: string) =>
     page.locator('.channel-main .channel-item').filter({ hasText: name });
+  await showList(page);
   await expect(channel('Channel Three')).toBeVisible();
   await channel('Channel Three').click();
   await expect(prompt).toBeVisible();
@@ -210,6 +221,7 @@ test('channels hidden from the list are locked with their source', async ({ page
   await routeLiveManifest(page);
   await seedPlaylist(page);
   await page.goto('/');
+  await openChannelList(page);
   const pressKey = (keyCode: number) => page.evaluate(
     k => document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: k, bubbles: true })),
     keyCode,
@@ -269,6 +281,7 @@ test('pointing a reviewed source at a new address locks it again', async ({ page
 
   const prompt = page.locator('.parental-pin-prompt');
   const channel = page.locator('.channel-main .channel-item').filter({ hasText: 'Channel Three' });
+  await showList(page);
   await expect(channel).toBeVisible();
   await channel.click();
   await expect(prompt).toBeVisible();
@@ -631,6 +644,7 @@ test('auto-play skips a locked last channel at startup', async ({ page }) => {
   await page.reload();
 
   await expect(page.locator('#view-channels')).toBeVisible();
+  await openChannelList(page);
   await expect(page.locator('.channel-item').first()).toBeVisible();
   await expect(page.locator('.parental-pin-prompt')).toBeHidden();
   await expect(page.locator('#view-player')).toBeHidden();
@@ -694,7 +708,7 @@ test('hides locked content until the manager is left with an unlock session', as
   await chooseOption(page, 'parental-conceal', 'hide-locked');
   await leaveLocked(page);
 
-  await enterTab(page, 'live');
+  await enterLiveList(page);
   const groups = page.locator('#view-channels .group-item');
   await expect(groups.filter({ hasText: 'Movies' })).toBeVisible();
   await expect(groups.filter({ hasText: 'News' })).toHaveCount(0);
@@ -712,7 +726,7 @@ test('hides locked content until the manager is left with an unlock session', as
 
   await chooseOption(page, 'parental-duration', 'until-backgrounded');
   await page.locator('[data-parental-back]').click();
-  await enterTab(page, 'live');
+  await enterLiveList(page);
   await expect(groups.filter({ hasText: 'News' })).toBeVisible();
 });
 
@@ -723,7 +737,7 @@ test('marks locked content with a lock that opens during an unlock session', asy
   await expect(news).toContainText('Locked');
   await leaveLocked(page);
 
-  await enterTab(page, 'live');
+  await enterLiveList(page);
   const groups = page.locator('#view-channels .group-item');
   const channels = page.locator('#view-channels .channel-main .channel-item');
   await expect(groups.filter({ hasText: 'News' }).locator('.lock-badge.is-locked')).toBeVisible();
@@ -739,7 +753,7 @@ test('marks locked content with a lock that opens during an unlock session', asy
   await chooseOption(page, 'parental-duration', 'until-backgrounded');
   await page.locator('[data-parental-back]').click();
 
-  await enterTab(page, 'live');
+  await enterLiveList(page);
   await expect(channels.filter({ hasText: 'Channel One' })
     .locator('.lock-badge.is-unlocked')).toBeVisible();
   await expect(groups.filter({ hasText: 'News' }).locator('.lock-badge.is-unlocked')).toBeVisible();
@@ -1059,7 +1073,7 @@ test('backgrounding closes an open PIN challenge', async ({ page }) => {
   await openManagerWithNewPin(page);
   await page.locator('[data-parental-group]').filter({ hasText: 'News' }).click();
   await leaveLocked(page);
-  await enterTab(page, 'live');
+  await enterLiveList(page);
   await page.locator('.channel-main .channel-item').first().click();
   const prompt = page.locator('.parental-pin-prompt');
   await expect(prompt).toBeVisible();
@@ -1276,7 +1290,7 @@ test('backgrounding closes the manager and restores concealment', async ({ page 
     document.dispatchEvent(new Event('visibilitychange'));
   });
 
-  await enterTab(page, 'live');
+  await enterLiveList(page);
   await expect(page.locator('.channel-main .channel-item').filter({ hasText: 'Channel Two' }))
     .toHaveCount(1);
   await expect(page.locator('.channel-main .channel-item').filter({ hasText: 'Channel One' }))
@@ -1367,7 +1381,7 @@ test('Lock now from the bar resumes Live on a row still shown', async ({ page })
   await chooseOption(page, 'parental-duration', 'until-backgrounded');
   await page.locator('[data-parental-back]').click();
 
-  await enterTab(page, 'live');
+  await enterLiveList(page);
   const rows = page.locator('#view-channels .channel-main .channel-item');
   const one = rows.filter({ hasText: 'Channel One' });
   await expect(one).toBeVisible();

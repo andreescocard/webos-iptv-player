@@ -1,5 +1,5 @@
 import {
-  enterTab, test, expect, isChromium53, neuterVideo, routeLiveManifest, routePlaylist,
+  enterTab, openChannelList, test, expect, isChromium53, neuterVideo, routeLiveManifest, routePlaylist,
   seedPlaylist, type Page, SAMPLE_M3U,
 } from './helpers';
 import { POLYFILLED_APIS } from '../scripts/polyfilled-apis.mjs';
@@ -287,6 +287,7 @@ test('no flex-gap container separates an element from loose text', async ({ page
   await expect(page.locator('.channel-view.editing .edit-hints')).toBeVisible();
   await collect();
   await page.keyboard.press('Escape');
+  await openChannelList(page);
 
   // Favorites management is a second editor mode with a hint bar of its own,
   // and it renders only while the Favorites group is active and non-empty.

@@ -2,6 +2,7 @@ import {
   test,
   expect,
   enterTab,
+  openChannelList,
   LIVE_MANIFEST,
   routeLiveManifest,
   routePlaylist,
@@ -109,6 +110,7 @@ async function setup(
     }, true);
   }, { enabled: options.enabled, stub: options.stub !== false });
   await page.goto('/');
+  await openChannelList(page);
   if (options.playlist) await expect(page.locator(ROW).first()).toBeVisible();
   else await expect(page.locator(ROW)).toHaveCount(2);
 }
@@ -207,6 +209,7 @@ test('Settings saves On across reload and Cancel discards Off', async ({ page })
   await page.locator('#save-settings').click();
   expect(await page.evaluate(() => localStorage.getItem('iptv_live_preview'))).toBe('true');
   await page.reload();
+  await openChannelList(page);
   await expect(page.locator(ROW)).toHaveCount(2);
   await selectFirst(page);
   await enterTab(page, 'settings');

@@ -67,7 +67,7 @@ test('the EPG reminder legend opens management and Back returns to it', async ({
   const entry = page.locator('.epg-reminder-entry');
   await expect(entry).toBeVisible();
   await entry.hover();
-  await expect(entry).toHaveCSS('font-size', '15px');
+  await expect(entry).toHaveCSS('font-size', '24px');
   await expect(entry).toHaveCSS('font-weight', '600');
   await expect(entry).toHaveCSS('box-shadow', 'none');
   await expect(entry).toHaveCSS('border-left-color', 'rgba(0, 0, 0, 0)');

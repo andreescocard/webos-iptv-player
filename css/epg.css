@@ -31,9 +31,9 @@
 .epg-schedule-title {
   min-width: 0;
   margin: 0;
-  font-size: 30px;
-  font-weight: 600;
-  line-height: 1.4;
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1.3;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -42,8 +42,8 @@
 
 .epg-schedule-count {
   flex-shrink: 0;
-  margin-left: 16px;
-  font-size: 22px;
+  margin-left: 20px;
+  font-size: 24px;
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -60,7 +60,7 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -417,12 +417,28 @@
   height: 64px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   padding: 0 16px 0 8px;
   cursor: pointer;
   border: 3px solid transparent;
   border-radius: 12px;
+  background: var(--catalog-surface);
   transition: background 0.12s;
+}
+
+.epg-channel-item .channel-logo-wrap,
+.epg-channel-item .channel-logo-placeholder {
+  width: 44px;
+  height: 44px;
+}
+
+.epg-channel-item .channel-logo {
+  max-width: 44px;
+  max-height: 44px;
+}
+
+.epg-channel-item .channel-logo-placeholder {
+  background: var(--catalog-control);
 }
 
 .epg-channel-item.selected {
@@ -438,7 +454,7 @@
 }
 
 .epg-ch-num {
-  min-width: 44px;
+  min-width: 36px;
   font-size: 18px;
   color: var(--text-muted);
   text-align: right;
@@ -456,6 +472,11 @@
 
 .epg-channel-item.selected .epg-ch-name {
   color: var(--text-primary);
+  font-weight: 600;
+}
+
+.epg-channel-item.selected .epg-ch-num {
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -485,7 +506,7 @@
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   margin-left: -12px;
   padding: 0 12px;
   overflow-x: auto;
@@ -499,11 +520,9 @@
 .epg-date-item {
   flex-shrink: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 96px;
-  padding: 6px 18px;
+  padding: 12px 20px;
   border-radius: 10px;
   border: 3px solid transparent;
   background: var(--catalog-control);
@@ -513,14 +532,19 @@
   transition: background 0.12s, color 0.12s;
 }
 
+.epg-date-item > * + * {
+  margin-left: 10px;
+}
+
 .epg-date-weekday {
-  font-size: 18px;
-  color: var(--text-secondary);
+  font-size: 26px;
+  font-weight: 600;
+  color: inherit;
   line-height: 1.2;
 }
 
 .epg-date-date {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 600;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
@@ -541,7 +565,8 @@
 }
 
 .epg-date-item.focused {
-  border-color: var(--text-primary);
+  border-color: var(--text-primary) !important;
+  box-shadow: none;
 }
 
 /* The padding is a ring gutter, offset so rows still align with the dates. */
@@ -565,7 +590,7 @@
   display: flex;
   align-items: flex-start;
   gap: 24px;
-  padding: 18px 24px 18px 12px;
+  padding: 20px 24px;
   cursor: pointer;
   border: 3px solid transparent;
   border-radius: 12px;
@@ -579,10 +604,8 @@
 
 .epg-programme-item.focused {
   background: var(--catalog-control);
-  border-color: transparent !important;
-  outline: 3px solid var(--catalog-focus);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 6px rgb(var(--catalog-focus-rgb) / 0.25);
+  border-color: var(--catalog-focus) !important;
+  box-shadow: none;
 }
 
 .epg-prog-time-col {
@@ -595,15 +618,15 @@
 }
 
 .epg-prog-time {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
 }
 
 .epg-prog-dur {
-  margin-top: 3px;
-  font-size: 18px;
+  margin-top: 4px;
+  font-size: 22px;
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
@@ -624,8 +647,8 @@
 }
 
 .epg-prog-title {
-  font-size: 26px;
-  font-weight: 500;
+  font-size: 28px;
+  font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 4px;
   display: flex;
@@ -642,7 +665,7 @@
 .epg-prog-desc {
   display: -webkit-box;
   margin-top: 8px;
-  font-size: 20px;
+  font-size: 24px;
   color: var(--text-secondary);
   line-height: 1.4;
   overflow: hidden;
@@ -652,18 +675,18 @@
 
 /* A compact strip with the selected program's description, on a catalog card. */
 .epg-programme-detail {
-  height: calc(44px + 80px * var(--font-scale));
+  height: calc(40px + 110px * var(--font-scale));
   flex-shrink: 0;
   box-sizing: border-box;
   margin: 12px 0 32px;
-  padding: 14px 24px;
+  padding: 20px 24px;
   border-radius: 12px;
   background: var(--catalog-surface);
   overflow: hidden;
 }
 
 .epg-detail-title {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -173,7 +173,7 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.appendChild(container);
   onSelect = vi.fn();
-  list = new ChannelList(container, { onChannelSelect: onSelect });
+  list = new ChannelList(container, { initialScreen: 'list', onChannelSelect: onSelect });
   // The list's scope owns the keys, as on the Live view.
   Focus.setBase(() => list.focusScope);
 });
@@ -203,7 +203,7 @@ function hover(el: HTMLElement): void {
 
 describe('ChannelList.render', () => {
   it('omits the live-preview toolbar when the setting is off', () => {
-    list = new ChannelList(container, {
+    list = new ChannelList(container, { initialScreen: 'list',
       onChannelSelect: onSelect,
       getPreviewHintState: () => 'off',
     });
@@ -212,7 +212,7 @@ describe('ChannelList.render', () => {
   });
 
   it('keeps one stable live-preview hint set across list and control focus', () => {
-    list = new ChannelList(container, {
+    list = new ChannelList(container, { initialScreen: 'list',
       onChannelSelect: onSelect,
       getPreviewHintState: () => 'active',
     });
@@ -699,7 +699,7 @@ describe('ChannelList.render', () => {
 
   it('notifies the app before entering channel edit mode', () => {
     const onEnterManagement = vi.fn();
-    list = new ChannelList(container, {
+    list = new ChannelList(container, { initialScreen: 'list',
       onChannelSelect: onSelect,
       onEnterManagement,
     });
@@ -712,7 +712,7 @@ describe('ChannelList.render', () => {
   it('notifies the app before entering favorite management', () => {
     const onEnterManagement = vi.fn();
     data.favorites = [channelKey(data.channels[0])];
-    list = new ChannelList(container, {
+    list = new ChannelList(container, { initialScreen: 'list',
       onChannelSelect: onSelect,
       onEnterManagement,
     });
@@ -1165,7 +1165,7 @@ describe('ChannelList listener lifecycle', () => {
     const c = document.createElement('div');
     document.body.appendChild(c);
     const spy = vi.spyOn(c, 'addEventListener');
-    const l = new ChannelList(c, { onChannelSelect: vi.fn() });
+    const l = new ChannelList(c, { initialScreen: 'list', onChannelSelect: vi.fn() });
     const initialCount = spy.mock.calls.filter(([type]) => type === 'nav:hover').length;
     l.render();
     l.render();
@@ -1258,5 +1258,154 @@ describe('ChannelList focus scope off the keys', () => {
     } finally {
       bar.dispose();
     }
+  });
+});
+
+describe('ChannelList browse rails', () => {
+  const realCount = playlistMock.getGroupCount;
+  let browse: ChannelList;
+
+  beforeEach(() => {
+    playlistMock.getGroupCount = (group: string, playlist?: string) =>
+      playlistMock.getByGroup(group, playlist).length;
+    browse = new ChannelList(container, { onChannelSelect: onSelect });
+    Focus.setBase(() => browse.focusScope);
+  });
+
+  afterEach(() => {
+    playlistMock.getGroupCount = realCount;
+    CONFIG.LIVE_RAIL_ITEMS = 20;
+  });
+
+  function railTitles(): string[] {
+    return Array.from(container.querySelectorAll('.live-rail .catalog-rail-title'))
+      .map(el => el.textContent?.trim() ?? '');
+  }
+
+  function focusedCard(): HTMLElement | null {
+    return ringedEl(container, '.focused');
+  }
+
+  it('opens on catalog rails: Favorites, Recently Watched, then one per group', () => {
+    data.favorites = [channelKey(data.channels[1])];
+    recentMock.items = [{ kind: 'live', channel: data.channels[2], channelIndex: 2 } as RecentlyWatchedItem];
+    browse.render();
+    expect(container.querySelector('.sidebar')).toBeNull();
+    expect(container.querySelector('.channel-main')).toBeNull();
+    expect(railTitles()).toEqual(['Favorites', 'Recently Watched', 'News', 'Sports']);
+    const news = container.querySelectorAll('.live-rail')[2];
+    expect(Array.from(news.querySelectorAll('.catalog-tile-name')).map(el => el.textContent))
+      .toEqual(['Alpha', 'Charlie']);
+  });
+
+  it('omits the Favorites and Recently Watched rails while they are empty', () => {
+    browse.render();
+    expect(railTitles()).toEqual(['News', 'Sports']);
+  });
+
+  it('shows the current program and its progress on a card', () => {
+    const start = new Date(Date.now() - 30 * 60_000);
+    const stop = new Date(Date.now() + 30 * 60_000);
+    const findChannelId = vi.spyOn(epgMock, 'findChannelId').mockReturnValue('e1' as never);
+    const nowPlaying = vi.spyOn(epgMock, 'getNowPlaying')
+      .mockReturnValue({ title: 'Show 1', start, stop } as never);
+    try {
+      browse.render();
+      const card = container.querySelector<HTMLElement>('.live-card')!;
+      expect(card.querySelector('.catalog-tile-episode')?.textContent).toBe('Show 1');
+      const fill = card.querySelector<HTMLElement>('.channel-progress .catalog-tile-progress-fill');
+      expect(parseFloat(fill?.style.width ?? '0')).toBeGreaterThan(40);
+    } finally {
+      findChannelId.mockRestore();
+      nowPlaying.mockRestore();
+    }
+  });
+
+  it('escapes an untrusted channel name on a card', () => {
+    data.channels[0].name = '<img src=x onerror="window.__railxss=1">';
+    try {
+      browse.render();
+      expect(container.querySelector('.live-card img:not(.channel-logo)')).toBeNull();
+      expect(container.querySelector('.live-card .catalog-tile-name')?.textContent)
+        .toContain('<img src=x');
+    } finally {
+      data.channels[0].name = 'Alpha';
+    }
+  });
+
+  it('moves within a rail with Left/Right and between rails with Up/Down, one ring', () => {
+    browse.render();
+    expect(focusedCard()?.textContent).toContain('Alpha');
+    browse.handleAction('right');
+    expect(focusedCard()?.textContent).toContain('Charlie');
+    browse.handleAction('right');
+    expect(focusedCard()?.textContent).toContain('Charlie');
+    browse.handleAction('down');
+    expect(focusedCard()?.closest('.live-rail')?.getAttribute('data-rail-key')).toBe('g:Sports');
+    expect(ringsIn(container)).toHaveLength(1);
+    browse.handleAction('up');
+    expect(focusedCard()?.closest('.live-rail')?.getAttribute('data-rail-key')).toBe('g:News');
+    expect(browse.handleAction('up')).toBe(true);
+    expect(focusedCard()?.closest('.live-browse-head')).not.toBeNull();
+    expect(browse.handleAction('up')).toBe(false);
+    expect(ringsIn(container)).toHaveLength(1);
+  });
+
+  it('plays the focused card within its rail group', () => {
+    browse.render();
+    browse.handleAction('down');
+    browse.handleAction('select');
+    expect(onSelect).toHaveBeenCalledWith(
+      1,
+      undefined,
+      { group: 'source:Sports', playlist: undefined },
+      'expand-current',
+    );
+  });
+
+  it('plays a channel number full screen from the rails', () => {
+    browse.render();
+    browse.handleAction('number', { number: 3, digits: '3' } as never);
+    expect(onSelect).toHaveBeenCalledWith(
+      2,
+      undefined,
+      { group: 'builtin:all', playlist: undefined },
+      'fullscreen',
+    );
+  });
+
+  it('caps a rail with a See all tile that opens the list on its group; Back returns', () => {
+    CONFIG.LIVE_RAIL_ITEMS = 1;
+    browse.render();
+    const news = container.querySelectorAll('.live-rail')[0];
+    expect(news.querySelectorAll('.live-card[data-channel-index]')).toHaveLength(1);
+    browse.handleAction('right');
+    const seeAll = focusedCard();
+    expect(seeAll?.dataset.liveSeeAll).toBe('source:News');
+    browse.handleAction('select');
+    expect(container.querySelector('.channel-main')).not.toBeNull();
+    expect(container.querySelector('.group-item.active')?.getAttribute('data-group'))
+      .toBe('source:News');
+    expect(browse.handleBack()).toBe(true);
+    expect(container.querySelector('.live-rails')).not.toBeNull();
+    expect(focusedCard()?.dataset.liveSeeAll).toBe('source:News');
+    expect(browse.handleBack()).toBe(false);
+  });
+
+  it('edits on the list screen and closes back to the rails', () => {
+    browse.render();
+    browse.handleAction('yellow');
+    expect(browse.isEditing).toBe(true);
+    expect(container.querySelector('.channel-view.editing .channel-main')).not.toBeNull();
+    expect(browse.handleBack()).toBe(true);
+    expect(browse.isEditing).toBe(false);
+    expect(container.querySelector('.live-rails')).not.toBeNull();
+  });
+
+  it('Green adds the focused channel to a Favorites rail', () => {
+    browse.render();
+    browse.handleAction('green');
+    expect(storageMock.toggleFavorite).toHaveBeenCalledWith(channelKey(data.channels[0]));
+    expect(railTitles()[0]).toBe('Favorites');
   });
 });

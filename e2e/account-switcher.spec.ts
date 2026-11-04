@@ -1,4 +1,4 @@
-import { test, expect, routeLiveManifest, SAMPLE_M3U, enterTab, type Page } from './helpers';
+import { test, expect, routeLiveManifest, SAMPLE_M3U, enterTab, openChannelList, type Page } from './helpers';
 
 // Two Xtream accounts on distinct hosts so player_api.php can serve a different
 // catalog per account: Alpha (a1) -> "Alpha Movie" under "Cat Alpha"; Bravo (a2)
@@ -305,6 +305,7 @@ test('a channel-list click that dismisses a pointer-opened menu hands the remote
   await routeLiveManifest(page);
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
+  await openChannelList(page);
 
   await openAccountMenu(page);
   await expect(page.locator('.account-menu-item.focused')).toHaveCount(1);
@@ -323,6 +324,7 @@ test('the pointer moves the account menu ring, and Back from a remote-opened men
   await routeLiveManifest(page);
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
+  await openChannelList(page);
 
   await openAccountMenu(page);
   const bravo = page.locator('.account-menu-item[data-account-id="a2"]');

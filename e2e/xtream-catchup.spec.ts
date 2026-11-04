@@ -143,7 +143,6 @@ test('resumes Xtream Catch-up directly from Recently Watched', async ({ page }) 
   });
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
-  await page.locator('[data-group="builtin:recently-watched"]').click();
   await expect(page.locator('.recent-catchup')).toContainText('Earlier Show');
 
   const archiveRequest = page.waitForRequest(request =>

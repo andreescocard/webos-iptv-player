@@ -18,8 +18,8 @@ async function gotoGroupedPlayer(page: Page): Promise<void> {
   await seedPlaylist(page);
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
-  await expect(page.locator('.channel-main .channel-item.focused')).toContainText('Alpha News');
-  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#view-channels .live-card.focused')).toContainText('Alpha News');
+  await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Enter'); // Beta News
   await expect(page.locator('#view-player')).toBeVisible();
 }
@@ -37,15 +37,15 @@ test('remote arrow keys move focus and Enter starts playback', async ({ page }) 
   await expect(page.locator('#view-channels')).toBeVisible();
 
   // Initial focus is the first channel (search + settings now live in the tab bar).
-  const focused = page.locator('.channel-main .channel-item.focused');
+  const focused = page.locator('#view-channels .live-card.focused');
   await expect(focused).toHaveCount(1);
   await expect(focused).toContainText('Channel One');
 
   await page.keyboard.press('ArrowDown');
-  await expect(page.locator('.channel-main .channel-item.focused')).toContainText('Channel Two');
+  await expect(page.locator('#view-channels .live-card.focused')).toContainText('Channel Two');
 
   await page.keyboard.press('ArrowUp');
-  await expect(page.locator('.channel-main .channel-item.focused')).toContainText('Channel One');
+  await expect(page.locator('#view-channels .live-card.focused')).toContainText('Channel One');
 
   // Enter on the focused channel starts playback (switches to the player view).
   await page.keyboard.press('Enter');
@@ -88,8 +88,8 @@ test('player sidebar focuses the playing channel; search still filters', async (
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
 
-  // Search box holds initial focus; Arrow Down enters the list, then Enter plays.
-  await page.keyboard.press('ArrowDown');
+  // Initial focus is Alpha News; Right steps to Beta News, then Enter plays.
+  await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Enter');
   await expect(page.locator('#view-player')).toBeVisible();
   await page.keyboard.press('ArrowLeft');
@@ -164,7 +164,7 @@ test('large sidebar decodes visible logos before revealing one per frame', async
   });
   await seedPlaylist(page);
   await page.goto('/');
-  await expect(page.locator('#view-channels')).toBeVisible();
+  await expect(page.locator('#view-channels .live-card').first()).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page.locator('#view-player')).toBeVisible();
   await page.keyboard.press('ArrowLeft');
@@ -277,8 +277,8 @@ test('player sidebar expands groups and retains a selected group after tuning', 
   await seedPlaylist(page);
   await page.goto('/');
   await expect(page.locator('#view-channels')).toBeVisible();
-  await expect(page.locator('.channel-main .channel-item.focused')).toContainText('Alpha News');
-  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#view-channels .live-card.focused')).toContainText('Alpha News');
+  await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Enter'); // Beta News
   await expect(page.locator('#view-player')).toBeVisible();
 

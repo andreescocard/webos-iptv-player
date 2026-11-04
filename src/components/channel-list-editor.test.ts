@@ -214,7 +214,7 @@ beforeEach(() => {
   onSelect = vi.fn();
   onEpgMappingChanged = vi.fn();
   onEpgOffsetChanged = vi.fn();
-  list = new ChannelList(container, {
+  list = new ChannelList(container, { initialScreen: 'list',
     onChannelSelect: onSelect,
     onChannelsChanged: vi.fn(),
     onEpgMappingChanged,
@@ -295,7 +295,7 @@ describe('ChannelList edit mode', () => {
 
     it('asks the edit guard before the pencil opens editing from favorites management', () => {
       const authorizeEdit = vi.fn();
-      list = new ChannelList(container, {
+      list = new ChannelList(container, { initialScreen: 'list',
         onChannelSelect: onSelect,
         onChannelsChanged: vi.fn(),
         onEpgMappingChanged,
@@ -432,12 +432,15 @@ describe('ChannelList edit mode', () => {
     });
   });
 
-  it('back leaves edit mode and is not consumed outside it', () => {
+  it('back leaves edit mode, then the list screen, and is not consumed on the rails', () => {
     list.render();
-    expect(list.handleBack()).toBe(false);
     enterEdit();
     expect(list.handleBack()).toBe(true);
     expect(list.isEditing).toBe(false);
+    expect(container.querySelector('.channel-main')).not.toBeNull();
+    expect(list.handleBack()).toBe(true);
+    expect(container.querySelector('.live-rails')).not.toBeNull();
+    expect(list.handleBack()).toBe(false);
   });
 
   it('back completes edit mode even while an item is selected', () => {
@@ -610,13 +613,13 @@ describe('ChannelList edit mode', () => {
     });
     const other = document.createElement('div');
     document.body.appendChild(other);
-    const replaced = new ChannelList(other, { onChannelSelect: vi.fn() });
+    const replaced = new ChannelList(other, { initialScreen: 'list', onChannelSelect: vi.fn() });
     const added = add.mock.calls.map(([type, listener]) => [type, listener]);
     expect(added.map(([type]) => type)).toContain('mouseup');
     expect(unsubscribed).toHaveLength(1);
     expect(unsubscribed[0]).not.toHaveBeenCalled();
 
-    list = new ChannelList(container, { onChannelSelect: onSelect });
+    list = new ChannelList(container, { initialScreen: 'list', onChannelSelect: onSelect });
     expect(remove.mock.calls.map(([type, listener]) => [type, listener]))
       .toEqual(expect.arrayContaining(added));
     expect(unsubscribed[0]).toHaveBeenCalledTimes(1);

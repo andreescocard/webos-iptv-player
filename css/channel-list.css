@@ -985,3 +985,209 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+/* Live browse: the catalog's rails and tiles (css/catalog-view.css), with no
+   hero. A head row holds the playlist chips and the list and edit buttons. */
+.channel-view.live-browse {
+  flex-direction: column;
+}
+
+.live-browse-head {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 40px 80px 24px;
+}
+
+.live-browse-count {
+  flex-shrink: 0;
+  margin-right: 32px;
+  font-size: 24px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* The padding holds a focused chip's glow inside the scroller. */
+.live-playlist-chips {
+  display: flex;
+  gap: 16px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 24px;
+  margin: -24px 0 -24px -24px;
+}
+
+.live-playlist-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.live-playlist-chip {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* The padding keeps chips that scroll under their clip short of the buttons. */
+.live-browse-actions {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 16px;
+}
+
+.live-browse-edit {
+  padding: 14px;
+}
+
+.live-browse-edit img {
+  display: block;
+  width: 32px;
+  height: 32px;
+  transform: scaleX(-1);
+}
+
+.live-rails {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 80px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.live-rails::-webkit-scrollbar {
+  display: none;
+}
+
+.live-rails-spacer {
+  position: relative;
+}
+
+/* A fixed height, so the rails virtualize on one stride (RAIL_*_STRIDE in
+   channel-list.ts): the track and art, plus three text lines. */
+.live-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(240px + 100px * var(--font-scale));
+  margin: 0;
+}
+
+/* Rows run out to the screen's right edge, as the catalog artwork does. */
+.live-rail .catalog-rail-track {
+  margin-right: -80px;
+  padding-right: 80px;
+}
+
+.live-rail .catalog-rail-title {
+  line-height: 1.33;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalog-tile.live-card {
+  width: 320px;
+}
+
+.catalog-poster-wrap.live-card-art {
+  position: relative;
+  width: 320px;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.live-card-art .live-card-logo {
+  max-width: 56%;
+  max-height: 56%;
+  border-radius: 0;
+}
+
+.live-card-initial {
+  font-size: 72px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.live-card-num {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--catalog-control);
+  color: var(--text-secondary);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.live-card-status {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-card-favorite {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  color: var(--accent);
+}
+
+.live-card-favorite svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+/* Fixed white on the accent disc, as accent-filled controls are. */
+.live-card-playing {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  padding: 7px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+}
+
+.live-card-playing svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* The playing channel keeps an accent name, apart from the focus ring. */
+.live-card.playing .catalog-tile-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.live-card-art .channel-progress {
+  height: 6px;
+  margin: 0;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.live-card .catalog-see-all-card {
+  padding: 0 16px;
+}
+
+.live-browse .catalog-see-all-label {
+  margin-top: 8px;
+}
+
+.live-browse .empty-state {
+  height: 100%;
+}
+
+.live-browse .edit-hints {
+  left: 0;
+}
