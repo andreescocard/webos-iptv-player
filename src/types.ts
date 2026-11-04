@@ -617,7 +617,7 @@ export interface ResumeEntry {
   position: number;   // seconds into the stream
   duration: number;   // total seconds, or 0 if unknown
   updatedAt: number;  // epoch ms, for recency ordering
-  /** Episode watched to within CONFIG.XTREAM.EPISODE_FINISH_PAD of its end; kept off the Continue rail. */
+  /** Watched to its end (an episode within EPISODE_FINISH_PAD, a movie into its credits); kept off the Continue rail. */
   watched?: boolean;
   episodeQueue?: VodQueueItem[];
   watchlistOwner?: WatchlistOwner;

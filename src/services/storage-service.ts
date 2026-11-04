@@ -1177,12 +1177,15 @@ export const StorageService = {
       });
       return;
     }
-    if (entry.kind === 'episode' && !finished && entry.position < CONFIG.XTREAM.RESUME_MIN_SECS) {
+    if (finished) {
+      // A finished movie stays on record as watched, off the Continue rail.
+      this.writeResume({ ...entry, position: entry.duration, watched: true });
+      return;
+    }
+    if (entry.position < CONFIG.XTREAM.RESUME_MIN_SECS) {
       // Keep a watched mark, and the not-yet-started next episode the rail points at.
       const existing = this.getResume(entry.accountId, entry.kind, entry.itemId);
-      if (existing && (existing.watched || existing.position === 0)) return;
-    }
-    if (finished || entry.position < CONFIG.XTREAM.RESUME_MIN_SECS) {
+      if (existing && (existing.watched || (entry.kind === 'episode' && existing.position === 0))) return;
       this.clearResume(entry.accountId, entry.kind, entry.itemId);
       return;
     }
@@ -1216,10 +1219,10 @@ export const StorageService = {
   },
   getResumeList(accountId: string): ResumeEntry[] {
     const all = userData ? userData.resume : get<Record<string, ResumeEntry>>('resume', {});
-    // A movie saved before the credits rule, or by an older build, is pruned rather than left stuck.
+    // A movie saved before the credits rule, or by an older build, is marked watched rather than left stuck.
     Object.keys(all).map((k) => all[k])
-      .filter((e) => e.kind !== 'episode' && isResumeFinished(e))
-      .forEach((e) => { this.clearResume(e.accountId, e.kind, e.itemId); });
+      .filter((e) => e.kind !== 'episode' && !e.watched && isResumeFinished(e))
+      .forEach((e) => { this.writeResume({ ...e, position: e.duration, watched: true }); });
     const fresh = userData ? userData.resume : get<Record<string, ResumeEntry>>('resume', {});
     return Object.keys(fresh)
       .map((k) => fresh[k])

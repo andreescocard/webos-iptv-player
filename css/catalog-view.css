@@ -159,6 +159,15 @@ html[data-animation="essential"] .catalog-hero-dot { transition: none; }
   background: rgba(255, 255, 255, 0.3);
 }
 .catalog-tile-progress-fill { height: 100%; background: var(--accent, #3ea6ff); }
+.catalog-tile.is-watched .catalog-poster { opacity: 0.55; }
+.catalog-tile-watched {
+  position: absolute; left: 10px; bottom: 10px;
+  display: flex; align-items: center;
+  padding: 4px 12px 4px 8px; border-radius: 6px;
+  font-size: 20px; font-weight: 600; color: #fff;
+  background: rgba(0, 0, 0, 0.75);
+}
+.catalog-tile-watched svg { width: 22px; height: 22px; margin-right: 6px; color: var(--accent, #3ea6ff); }
 .catalog-tile-episode {
   margin-top: 2px; font-size: 20px; color: var(--text-secondary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
