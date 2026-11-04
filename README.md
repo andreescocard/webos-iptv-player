@@ -11,7 +11,7 @@
   </p>
 </div>
 
-Current version: **1.21.0** — [Release notes](CHANGELOG.md).
+Current version: **1.22.0** — [Release notes](CHANGELOG.md).
 
 ## Screenshots
 
@@ -61,16 +61,16 @@ Current version: **1.21.0** — [Release notes](CHANGELOG.md).
 
 **Live TV & on-demand**
 
-- **Program guide (EPG)** — readable channel schedules with a compact date selector and a fixed detail panel for the selected program; auto-derived date range, per-source time correction, and caching for instant reopen
+- **Program guide (EPG)** — channel schedules with catalog-style program cards and day chips, a fixed detail panel for the selected program, auto-derived date range, per-source time correction, and caching for instant reopen
 - **Channel health** — check live streams and mark them as healthy, suspect, or unavailable
 - **Reminders** — flag an upcoming program and get notified at air time, even with the app closed, to tune straight in
 - **Recently Watched** — return to recent live channels or resume partially watched catch-up programs
-- **Live preview** — browse a wider channel list with current-program progress beside a 16:9 preview, program info, and quick controls
-- **Movies & Series** — browse an Xtream account's VOD catalogs, with Continue Watching (one card per series, moving on to the next episode) and account-scoped Watchlist rails
-- **Movie suggestions** — a random movie rated at least 7/10 from loaded categories appears above the Watchlist when entering Movies; opening a category shows a suggestion from that category, using the same banner layout as Series. Ratings come from the IPTV provider, not a verified IMDb lookup.
+- **Live browsing & preview** — horizontal channel rails for Favorites, Recently Watched, and each group, with current-program progress, channel editing, group controls, and a 16:9 live preview
+- **Movies & Series** — browse an Xtream account's VOD catalogs, with Continue Watching (one card per series, moving on to the next episode) and account-scoped Watchlist rails. Movies places the Watchlist first; watched movies move to its end with a Watched label and play from the beginning.
+- **Movie suggestions** — a random movie rated at least 7/10 from loaded categories appears in the Movies banner; opening a category shows a suggestion from that category, using the same banner layout as Series. Ratings come from the IPTV provider, not a verified IMDb lookup.
 - **Movie categories** — icon cards and a complete category index, including small catalogs. Explicitly service-labeled categories appear under Streaming; those labels do not confirm external availability. Category names remain readable across themes and at 150% text size.
 - **Movie sorting** — sort movies within a category by Original order, A–Z, Z–A, or Top rated, with unrated titles last. Hero actions, sorting controls, and posters are reachable with the remote and Magic Remote pointer.
-- **Automatic VOD queues** — continue through series episodes or remaining Watchlist movies, removing completed titles from the Watchlist
+- **Automatic VOD queues** — continue through series episodes or remaining Watchlist movies; completed movies leave Continue Watching but keep their watched status
 - **Catch-up & Live DVR** — replay past programs, and pause / rewind / return to the live edge on live streams
 - **Parental controls** — lock Live TV groups, movie and series categories, or individual titles with a PIN, with adult groups suggested for locking; locked content can stay listed with a lock or be hidden, and you choose when the PIN is asked again
 

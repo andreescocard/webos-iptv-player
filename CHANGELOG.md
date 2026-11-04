@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.22.0 — 2026-11-04
+
+### Changed
+
+- Live browses channels in horizontal rails for Favorites, Recently
+  Watched, and each group, with current-program progress and buttons for
+  channel editing and group controls.
+- Guide uses catalog-style program cards and day selectors.
+- Movies places the Watchlist above Continue Watching. Watched movies
+  move to the end of the Watchlist with a Watched label and offer Play
+  instead of Resume.
+- Continue Watching appears above smart collections in Movies and Series.
+- Only the active non-English language catalog loads, reducing the initial
+  app bundle. Build-time size limits guard the app, worker, and locales.
+
+### Fixed
+
+- Catalog collections deduplicate quality and language variants and avoid
+  repeating the same title across smart rails.
+- Continue Watching keeps only the latest episode of each series.
+- Movies longer than 20 minutes with seven minutes or less remaining
+  count as watched, including previously saved resume points. Shorter
+  videos retain the existing completion rule.
+
 ## 1.21.0 — 2026-11-03
 
 ### Added
