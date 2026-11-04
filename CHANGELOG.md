@@ -23,6 +23,8 @@
 - Movies longer than 20 minutes with seven minutes or less remaining
   count as watched, including previously saved resume points. Shorter
   videos retain the existing completion rule.
+- Reaching the end of a movie preserves its watched record and Watchlist
+  entry, so its Watched badge remains visible after reopening the app.
 
 ## 1.21.0 — 2026-11-03
 

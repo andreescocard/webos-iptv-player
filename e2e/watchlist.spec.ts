@@ -232,7 +232,38 @@ test('keeps three pseudo-localized movie actions on one row without clipping', a
   expect(new Set(layout.buttons.map(button => button.top)).size).toBe(1);
 });
 
-test('auto-plays the next Watchlist movie and removes each completed movie', async ({ page }) => {
+for (const completion of ['credits', 'ended'] as const) {
+  test(`keeps a ${completion} movie in the Watchlist with its watched badge after reload`, async ({ page }) => {
+    await seedWatchlistCatalog(page, [movieEntry('10', 'Movie One', 1000)]);
+    await routeLiveManifest(page);
+    await neuterVideo(page);
+    await page.goto('/');
+    await enterTab(page, 'movies');
+    await focusAndSelect(page, '#view-movies [data-watchlist-item="10"]');
+    await focusAndSelect(page, '#view-movies [data-action="play"]');
+    await expect(page.locator('#view-player')).toBeVisible();
+    await page.locator('#video-player').evaluate((video) => {
+      Object.defineProperty(video, 'duration', { configurable: true, get: () => 2700 });
+      Object.defineProperty(video, 'currentTime', { configurable: true, get: () => 2280 });
+    });
+    if (completion === 'ended') await finishCurrentVideo(page);
+    else await page.evaluate(() =>
+      document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 461, bubbles: true })));
+    await expect(page.locator('#view-movies')).toBeVisible();
+    await enterTab(page, 'movies');
+    const badge = page.locator('#view-movies [data-watchlist-item="10"] .catalog-tile-watched');
+    await expect(badge).toHaveText('Watched');
+    await expect.poll(async () =>
+      (await readUserDataStore<{ watched?: boolean }>(page, 'playback-progress'))
+        .some(record => record.value.watched === true)).toBe(true);
+    await page.reload();
+    await enterTab(page, 'movies');
+    await expect(badge).toHaveText('Watched');
+    await expect(page.locator('#view-movies [data-key="rail:continue"]')).toHaveCount(0);
+  });
+}
+
+test('auto-plays the next Watchlist movie and keeps completed movies marked watched', async ({ page }) => {
   await seedWatchlistCatalog(page, [
     movieEntry('10', 'Movie One', 2000),
     movieEntry('11', 'Movie Two', 1000),
@@ -249,14 +280,15 @@ test('auto-plays the next Watchlist movie and removes each completed movie', asy
   await finishCurrentVideo(page);
   await expect.poll(async () =>
     (await storedWatchlist(page)).map((entry) => entry.itemId))
-    .toEqual(['11']);
+    .toEqual(['10', '11']);
   await expect(page.locator('#player-osd .osd-next-episode')).toContainText('Movie Two');
   await expect(page.locator('#player-osd .osd-next-episode')).toHaveCount(0);
   await expect(page.locator('#player-osd .osd-channel-name')).toHaveText('Movie Two');
 
   await finishCurrentVideo(page);
   await expect(page.locator('#view-movies')).toBeVisible();
-  await expect.poll(() => storedWatchlist(page)).toEqual([]);
+  await expect.poll(async () =>
+    (await storedWatchlist(page)).map((entry) => entry.itemId)).toEqual(['10', '11']);
 });
 
 test('auto-plays the next episode and removes a series only after its final episode', async ({ page }) => {

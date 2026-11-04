@@ -1390,18 +1390,6 @@ describe('Player VOD mode', () => {
     expect(StorageService.setResume).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'e1', position: 2700 }));
   });
 
-  it('clears resume and Watchlist state when a movie ends', () => {
-    const video = fakeVideo(3600);
-    player.init(video);
-    const r = req();
-    vi.mocked(StorageService.removeWatchlist).mockClear();
-    player.playVod(r);
-    video.dispatchEvent(new Event('ended'));
-    expect(StorageService.clearResume).toHaveBeenCalledWith('x1', 'vod', '10');
-    expect(StorageService.removeWatchlist).toHaveBeenCalledWith('x1', 'vod', '10');
-    expect(r.onBack).toHaveBeenCalled();
-  });
-
   it('counts down and starts the next movie from a Watchlist queue', async () => {
     HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
     HTMLMediaElement.prototype.pause = vi.fn();

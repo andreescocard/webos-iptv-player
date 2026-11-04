@@ -894,12 +894,9 @@ export class Player {
 
   private finishVod(v: VodPlayback, countdown: boolean): void {
     this.vod = null; // before stop(), so it doesn't re-save a resume point for a finished movie
-    // An episode is marked watched, which also moves Continue Watching to the next one.
-    if (v.kind === 'episode') this.saveVodResume(v, true);
-    else StorageService.clearResume(v.accountId, v.kind, v.itemId);
-    if (v.kind === 'vod') {
-      StorageService.removeWatchlist(v.accountId, 'vod', v.itemId);
-    } else if ((v.episodeQueue?.length ?? 0) === 0 && v.watchlistOwner) {
+    // Keep the watched record for both movies and episodes.
+    this.saveVodResume(v, true);
+    if (v.kind === 'episode' && (v.episodeQueue?.length ?? 0) === 0 && v.watchlistOwner) {
       StorageService.removeWatchlist(v.accountId, v.watchlistOwner.kind, v.watchlistOwner.itemId);
     }
     this.stop();
